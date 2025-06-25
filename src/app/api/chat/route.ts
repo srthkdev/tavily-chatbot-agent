@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const { 
       messages, 
       user_id, 
-      conversation_id,
+      // conversation_id, // Not yet implemented
       use_search = true,
       search_query,
       max_results = 5 
@@ -90,7 +90,7 @@ Please provide a comprehensive answer based on the search results above. Include
       if (!model) {
         throw new Error('No AI model available')
       }
-    } catch (error) {
+    } catch {
       return NextResponse.json({ 
         error: 'AI service is not configured. Please set at least one AI provider API key.' 
       }, { status: 500 })

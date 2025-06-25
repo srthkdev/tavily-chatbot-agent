@@ -40,12 +40,9 @@ export interface TavilyExtractOptions {
 export interface TavilyExtractResult {
   url: string
   title?: string
-  content: string
-  rawContent: string
-  images?: Array<{
-    url: string
-    description?: string
-  }>
+  content?: string
+  rawContent?: string
+  images?: string[]
 }
 
 export interface TavilyExtractResponse {
@@ -88,7 +85,7 @@ export async function searchWeb(options: TavilySearchOptions): Promise<TavilySea
       query: options.query,
       answer: response.answer,
       images: response.images || [],
-      results: response.results.map((result: any) => ({
+      results: response.results.map((result: { url: string; title: string; content: string; score: number; rawContent?: string }) => ({
         url: result.url,
         title: result.title,
         content: result.content,
@@ -112,12 +109,11 @@ export async function extractContent(options: TavilyExtractOptions): Promise<Tav
       includeImages: options.includeImages || false,
       extractDepth: options.extractDepth || 'basic',
     })
-    
     return {
-      results: response.results.map((result: any) => ({
+      results: response.results.map((result: TavilyExtractResult) => ({
         url: result.url,
         title: result.title,
-        content: result.content || result.rawContent,
+        content: result.content || result.rawContent || '',
         rawContent: result.rawContent,
         images: result.images || [],
       })),
@@ -141,7 +137,7 @@ export async function searchAndCreateBot(url: string, maxResults = 10): Promise<
     url: string
     title: string
     content: string
-    metadata?: any
+    metadata?: Record<string, unknown>
   }>
 }> {
   try {
@@ -174,7 +170,7 @@ export async function searchAndCreateBot(url: string, maxResults = 10): Promise<
       {
         url: mainContent.url,
         title: mainContent.title || 'Homepage',
-        content: mainContent.content,
+        content: mainContent.content || mainContent.rawContent || '',
         metadata: {
           isMainPage: true,
           extractedAt: new Date().toISOString(),
@@ -199,7 +195,7 @@ export async function searchAndCreateBot(url: string, maxResults = 10): Promise<
     return {
       namespace,
       title: mainContent.title || hostname,
-      description: mainContent.content.substring(0, 200) + '...',
+      description: (mainContent.content || mainContent.rawContent || 'No description available').substring(0, 200) + '...',
       pagesCrawled: allContent.length,
       content: allContent,
     }

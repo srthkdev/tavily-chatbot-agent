@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Search, Zap, Brain, Database, Globe, MessageSquare, Sparkles } from 'lucide-react'
+import { Search, Zap, Brain, Database, MessageSquare, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
 export default function HomePage() {
@@ -102,7 +102,7 @@ export default function HomePage() {
             <div className="flex gap-2">
               <Input
                 type="text"
-                placeholder="Ask anything... (e.g., 'What's happening in AI today?')"
+                placeholder="Ask anything... (e.g., &quot;What&apos;s happening in AI today?&quot;)"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleQuickSearch()}
@@ -255,7 +255,7 @@ export default function HomePage() {
                 </div>
                 <p className="text-sm text-gray-600 mt-4">
                   Secure user management, conversation persistence, and real-time synchronization
-                  across devices with Appwrite's comprehensive backend services.
+                                      across devices with Appwrite&apos;s comprehensive backend services.
                 </p>
               </CardContent>
             </Card>

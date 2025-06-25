@@ -4,9 +4,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Send, Bot, User, Search, ExternalLink, Loader2, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
@@ -43,6 +42,7 @@ export default function ChatPage() {
     if (initialQuery) {
       handleSend(initialQuery)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery])
 
   const handleSend = async (message?: string) => {
@@ -80,7 +80,7 @@ export default function ChatPage() {
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
 
-      let assistantMessage: Message = {
+             const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: '',

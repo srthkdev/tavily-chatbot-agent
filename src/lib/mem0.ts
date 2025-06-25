@@ -43,7 +43,7 @@ function getMem0Headers() {
 export async function addMemories(
   messages: MemoryMessage[],
   options: MemoryOptions
-): Promise<{ success: boolean; memories: any[] }> {
+): Promise<{ success: boolean; memories: unknown[] }> {
   try {
     const response = await fetch('https://api.mem0.ai/v1/memories', {
       method: 'POST',

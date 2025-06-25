@@ -371,7 +371,8 @@ export async function getMessages(conversationId: string, limit = 50) {
 // Realtime subscriptions (simplified - can be enhanced with proper Appwrite realtime later)
 export function subscribeToConversation(
   conversationId: string,
-  onMessage: (message: Message) => void
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _onMessage: (message: Message) => void
 ) {
   // Placeholder for realtime functionality
   // In a production app, you would implement proper Appwrite realtime subscriptions
@@ -381,7 +382,8 @@ export function subscribeToConversation(
 
 export function subscribeToUserChatbots(
   userId: string,
-  onUpdate: (chatbot: Chatbot) => void
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _onUpdate: (chatbot: Chatbot) => void
 ) {
   // Placeholder for realtime functionality
   console.log('Realtime subscription for user chatbots:', userId)

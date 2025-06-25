@@ -78,7 +78,7 @@ export interface TavilyConfig {
     logoPath: string
   }
   ai: {
-    model: any
+    model: ReturnType<typeof getAIModel> | null
     temperature: number
     maxTokens: number
     systemPrompt: string
@@ -108,9 +108,9 @@ export interface TavilyConfig {
     }
   }
   rateLimits: {
-    create: any
-    query: any
-    search: any
+    create: ReturnType<typeof createRateLimiter>
+    query: ReturnType<typeof createRateLimiter>
+    search: ReturnType<typeof createRateLimiter>
   }
   features: {
     enableCreation: boolean

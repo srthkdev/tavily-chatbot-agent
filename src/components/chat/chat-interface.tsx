@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+// import { Badge } from '@/components/ui/badge' // Not used in this component
 import { Send, Bot, User, Search, ExternalLink, Loader2 } from 'lucide-react'
 
 interface Message {
@@ -43,6 +43,7 @@ export function ChatInterface({ chatbotId, initialMessage, onMessageSent }: Chat
     if (initialMessage) {
       handleSend(initialMessage)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialMessage])
 
   const handleSend = async (message?: string) => {
@@ -84,7 +85,7 @@ export function ChatInterface({ chatbotId, initialMessage, onMessageSent }: Chat
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
 
-      let assistantMessage: Message = {
+             const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: '',

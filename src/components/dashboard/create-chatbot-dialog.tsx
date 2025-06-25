@@ -16,7 +16,7 @@ import {
 import { Plus, Loader2, Globe } from 'lucide-react'
 
 interface CreateChatbotDialogProps {
-  onChatbotCreated?: (chatbot: any) => void
+  onChatbotCreated?: (chatbot: unknown) => void
 }
 
 export function CreateChatbotDialog({ onChatbotCreated }: CreateChatbotDialogProps) {

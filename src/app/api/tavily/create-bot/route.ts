@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { searchWeb } from '@/lib/tavily'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 

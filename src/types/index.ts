@@ -75,7 +75,7 @@ export interface Mem0Memory {
   memory: string
   userId: string
   hash: string
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
   createdAt: string
   updatedAt: string
 }
