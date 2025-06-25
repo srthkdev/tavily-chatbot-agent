@@ -19,7 +19,7 @@ export interface Chatbot {
   description: string
   url: string
   status: 'active' | 'inactive'
-  provider: 'openai' | 'anthropic' | 'gemini' | 'grok'
+  provider: 'openai' | 'anthropic' | 'gemini' | 'groq'
   conversations: number
   lastUsed: Date
   createdAt: Date

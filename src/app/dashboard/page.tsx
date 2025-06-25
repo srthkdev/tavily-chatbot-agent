@@ -30,7 +30,7 @@ interface ChatbotStats {
   conversations: number
   lastUsed: Date
   status: 'active' | 'inactive'
-  provider: 'openai' | 'anthropic' | 'gemini' | 'grok'
+  provider: 'openai' | 'anthropic' | 'gemini' | 'groq'
 }
 
 export default function DashboardPage() {
@@ -92,7 +92,7 @@ export default function DashboardPage() {
       case 'openai': return 'bg-green-500'
       case 'anthropic': return 'bg-orange-500'
       case 'gemini': return 'bg-blue-500'
-      case 'grok': return 'bg-purple-500'
+      case 'groq': return 'bg-purple-500'
       default: return 'bg-gray-500'
     }
   }
@@ -102,7 +102,7 @@ export default function DashboardPage() {
       case 'openai': return 'OpenAI'
       case 'anthropic': return 'Anthropic'
       case 'gemini': return 'Gemini'
-      case 'grok': return 'Grok'
+      case 'groq': return 'Groq'
       default: return provider
     }
   }
@@ -181,7 +181,7 @@ export default function DashboardPage() {
                 <CardContent>
                   <div className="text-2xl font-bold">4</div>
                   <p className="text-xs text-muted-foreground">
-                    OpenAI, Anthropic, Gemini, Grok
+                    OpenAI, Anthropic, Gemini, Groq
                   </p>
                 </CardContent>
               </Card>

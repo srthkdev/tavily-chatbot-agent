@@ -1,11 +1,11 @@
 # Tavily Chatbot
 
-A modern AI chatbot platform that leverages **Tavily Search API** for real-time web content retrieval, integrated with **Appwrite** for backend services, **Mem0** for memory management, and supporting multiple AI providers including **Gemini**, **Grok**, **OpenAI**, and **Anthropic**.
+A modern AI chatbot platform that leverages **Tavily Search API** for real-time web content retrieval, integrated with **Appwrite** for backend services, **Mem0** for memory management, and supporting multiple AI providers including **Gemini**, **Groq**, **OpenAI**, and **Anthropic**.
 
 ## 🚀 Features
 
 - **Real-time Web Search**: Powered by Tavily Search API optimized for AI agents
-- **Multiple AI Providers**: OpenAI GPT-4o, Anthropic Claude 3.5, Google Gemini 2.0, and Grok
+- **Multiple AI Providers**: OpenAI GPT-4o, Anthropic Claude 3.5, Google Gemini 2.0, and Groq Llama
 - **Persistent Memory**: Mem0 integration for personalized conversation memory
 - **Modern UI**: Built with Next.js 15, React 19, and Tailwind CSS
 - **Backend Services**: Appwrite for authentication, database, and real-time features
@@ -26,7 +26,7 @@ A modern AI chatbot platform that leverages **Tavily Search API** for real-time 
 - **AI SDK**: Vercel AI SDK for streaming responses
 - **LLM Providers**:
   - Google Gemini (via @ai-sdk/google)
-  - Grok (via @ai-sdk/openai-compatible)
+  - Groq (via @ai-sdk/groq)
   - OpenAI GPT-4o
   - Anthropic Claude 3.5 Sonnet
 
@@ -41,7 +41,7 @@ A modern AI chatbot platform that leverages **Tavily Search API** for real-time 
 
 - **Node.js** 18+ or **Bun**
 - **Tavily API Key** - Get from [Tavily](https://tavily.com)
-- **AI Provider API Keys** - OpenAI, Anthropic, Google, and/or Grok
+- **AI Provider API Keys** - OpenAI, Anthropic, Google, and/or Groq
 - **Appwrite Instance** - [Appwrite Cloud](https://cloud.appwrite.io) or self-hosted
 - **Mem0 API Key** - Get from [Mem0](https://mem0.ai)
 - **Upstash Redis** (optional) - For rate limiting
@@ -89,7 +89,7 @@ MEM0_API_KEY=your_mem0_api_key
 OPENAI_API_KEY=your_openai_key
 ANTHROPIC_API_KEY=your_anthropic_key
 GOOGLE_API_KEY=your_gemini_key
-GROK_API_KEY=your_grok_key
+GROQ_API_KEY=your_groq_key
 
 # Optional: Rate Limiting
 UPSTASH_REDIS_REST_URL=your_redis_url
@@ -164,7 +164,7 @@ export const config = {
       openai: { model: "gpt-4o", enabled: true },
       anthropic: { model: "claude-3-5-sonnet-20241022", enabled: true },
       gemini: { model: "gemini-2.0-flash-exp", enabled: true },
-      grok: { model: "grok-beta", enabled: true }
+      groq: { model: "meta-llama/llama-4-scout-17b-16e-instruct", enabled: true }
     },
     temperature: 0.7,
     maxTokens: 2000

@@ -37,7 +37,7 @@ export default function HomePage() {
     {
       icon: Zap,
       title: 'Multi-AI Support',
-      description: 'Choose from OpenAI, Anthropic, Gemini, and Grok with intelligent fallbacks',
+                  description: 'Choose from OpenAI, Anthropic, Gemini, and Groq with intelligent fallbacks',
       color: 'bg-green-500'
     },
     {
@@ -182,7 +182,7 @@ export default function HomePage() {
                   <Badge variant="secondary">OpenAI GPT-4o</Badge>
                   <Badge variant="secondary">Anthropic Claude 3.5</Badge>
                   <Badge variant="secondary">Google Gemini 2.0</Badge>
-                  <Badge variant="secondary">Grok Beta</Badge>
+                  <Badge variant="secondary">Groq Llama</Badge>
                 </div>
                 <p className="text-sm text-gray-600 mt-4">
                   The system automatically selects the best available AI provider based on your configuration,

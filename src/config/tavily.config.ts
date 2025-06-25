@@ -1,7 +1,7 @@
 import { google } from '@ai-sdk/google'
 import { openai } from '@ai-sdk/openai'
 import { anthropic } from '@ai-sdk/anthropic'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { groq } from '@ai-sdk/groq'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 
@@ -22,14 +22,10 @@ const AI_PROVIDERS = {
     enabled: !!process.env.GOOGLE_API_KEY,
     name: 'Google Gemini 2.0 Flash'
   },
-  grok: {
-    model: createOpenAICompatible({
-      name: 'grok',
-      baseURL: 'https://api.x.ai/v1',
-      apiKey: process.env.GROK_API_KEY,
-    })('grok-beta'),
-    enabled: !!process.env.GROK_API_KEY,
-    name: 'Grok Beta'
+  groq: {
+    model: groq('meta-llama/llama-4-scout-17b-16e-instruct'),
+    enabled: !!process.env.GROQ_API_KEY,
+    name: 'Groq Llama 4 Scout'
   },
 }
 
@@ -40,13 +36,13 @@ function getAIModel() {
     return null
   }
   
-  // Priority: OpenAI > Anthropic > Gemini > Grok
+  // Priority: OpenAI > Anthropic > Gemini > Groq
   if (AI_PROVIDERS.openai.enabled) return AI_PROVIDERS.openai.model
   if (AI_PROVIDERS.anthropic.enabled) return AI_PROVIDERS.anthropic.model
   if (AI_PROVIDERS.gemini.enabled) return AI_PROVIDERS.gemini.model
-  if (AI_PROVIDERS.grok.enabled) return AI_PROVIDERS.grok.model
+  if (AI_PROVIDERS.groq.enabled) return AI_PROVIDERS.groq.model
   
-  throw new Error('No AI provider configured. Please set at least one API key: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, or GROK_API_KEY')
+  throw new Error('No AI provider configured. Please set at least one API key: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, or GROQ_API_KEY')
 }
 
 // Rate limiter factory
