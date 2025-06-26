@@ -1,308 +1,545 @@
 "use client"
 
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Search, Zap, Brain, Database, MessageSquare, Sparkles } from 'lucide-react'
-import Link from 'next/link'
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import Image from "next/image"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { useStorage } from "@/hooks/useStorage"
+import { clientConfig as config } from "@/config/tavily.config"
+import { 
+  Globe, 
+  ArrowRight, 
+  Settings, 
+  Loader2, 
+  CheckCircle2, 
+  FileText, 
+  AlertCircle,
+  Database,
+  Zap,
+  Search,
+  Sparkles,
+  Lock,
+  ExternalLink
+} from "lucide-react"
+import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
-export default function HomePage() {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+export default function TavilyPage() {
+  const router = useRouter()
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+  const urlParam = searchParams.get('url')
+  const { saveIndex } = useStorage()
+  
+  const [url, setUrl] = useState(urlParam || 'https://docs.tavily.com/')
+  const [hasInteracted, setHasInteracted] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+  const [pageLimit, setPageLimit] = useState(config.tavily.defaultLimit)
+  const [isCreationDisabled, setIsCreationDisabled] = useState<boolean | undefined>(undefined)
+  const [crawlProgress, setCrawlProgress] = useState<{
+    status: string
+    pagesFound: number
+    pagesScraped: number
+    currentPage?: string
+  } | null>(null)
+  const [showApiKeyModal, setShowApiKeyModal] = useState(false)
+  const [tavilyApiKey, setTavilyApiKey] = useState<string>("")
+  const [isValidatingApiKey, setIsValidatingApiKey] = useState(false)
+  const [hasTavilyKey, setHasTavilyKey] = useState(false)
 
-  const handleQuickSearch = async () => {
-    if (!searchQuery.trim()) return
+  useEffect(() => {
+    // Check environment and API keys
+    fetch('/api/check-env')
+      .then(res => res.json())
+      .then(data => {
+        setIsCreationDisabled(data.environmentStatus.DISABLE_CHATBOT_CREATION || false)
+        
+        // Check for Tavily API key
+        const hasEnvTavily = data.environmentStatus.TAVILY_API_KEY
+        setHasTavilyKey(hasEnvTavily)
+        
+        if (!hasEnvTavily) {
+          // Check localStorage for saved API key
+          const savedKey = localStorage.getItem('tavily_api_key')
+          if (savedKey) {
+            setTavilyApiKey(savedKey)
+            setHasTavilyKey(true)
+          }
+        }
+      })
+      .catch(() => {
+        setIsCreationDisabled(false)
+      })
+  }, [])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!url) return
+
+    // Check if we have Tavily API key
+    if (!hasTavilyKey && !localStorage.getItem('tavily_api_key')) {
+      setShowApiKeyModal(true)
+      return
+    }
+
+    // Normalize URL
+    let normalizedUrl = url.trim()
+    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+      normalizedUrl = 'https://' + normalizedUrl
+    }
     
-    setIsLoading(true)
-    // Navigate to chat with the search query
-    window.location.href = `/chat?q=${encodeURIComponent(searchQuery)}`
+    // Validate URL
+    try {
+      new URL(normalizedUrl)
+    } catch {
+      toast.error('Please enter a valid URL')
+      return
+    }
+
+    setLoading(true)
+    setCrawlProgress({
+      status: 'Starting search...',
+      pagesFound: 0,
+      pagesScraped: 0
+    })
+    
+    interface SearchResponse {
+      success: boolean
+      namespace: string
+      message: string
+      details: {
+        url: string
+        resultsFound: number
+      }
+      data: Array<{
+        url?: string
+        title?: string
+        content?: string
+        published_date?: string
+        score?: number
+      }>
+    }
+    
+    let data: SearchResponse | null = null
+    
+    try {
+      // Simulate progressive updates
+      let currentProgress = 0
+      
+      const progressInterval = setInterval(() => {
+        currentProgress += Math.random() * 2
+        if (currentProgress > pageLimit * 0.8) {
+          clearInterval(progressInterval)
+        }
+        
+        setCrawlProgress(prev => {
+          if (!prev) return null
+          const processed = Math.min(Math.floor(currentProgress), pageLimit)
+          return {
+            ...prev,
+            status: processed < pageLimit * 0.3 ? 'Searching web content...' : 
+                   processed < pageLimit * 0.7 ? 'Processing results...' : 
+                   'Finalizing...',
+            pagesFound: pageLimit,
+            pagesScraped: processed,
+            currentPage: processed > 0 ? `Processing result ${processed} of ${pageLimit}` : undefined
+          }
+        })
+      }, 300)
+      
+      // Get API key from localStorage if not in environment
+      const tavilyApiKey = localStorage.getItem('tavily_api_key')
+      
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      
+      // Add API key to headers if available from localStorage (and not in env)
+      if (tavilyApiKey) {
+        headers['X-Tavily-API-Key'] = tavilyApiKey
+      }
+      
+      const response = await fetch('/api/tavily/create-bot', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ 
+          url: normalizedUrl, 
+          maxResults: pageLimit,
+          searchDepth: config.tavily.searchDepth 
+        })
+      })
+
+      data = await response.json()
+      
+      // Clear the interval
+      if (progressInterval) clearInterval(progressInterval)
+      
+      if (data && data.success) {
+        // Update progress to show completion
+        setCrawlProgress({
+          status: 'Search complete!',
+          pagesFound: data.details?.resultsFound || 0,
+          pagesScraped: data.details?.resultsFound || 0
+        })
+        
+        // Find the best metadata from results
+        let homepageMetadata: {
+          title?: string
+          description?: string
+          favicon?: string
+          ogImage?: string
+        } = {}
+        
+        if (data.data && data.data.length > 0) {
+          const bestResult = data.data.find((result) => {
+            return result.url === normalizedUrl || result.url === normalizedUrl + '/' || result.url === normalizedUrl.replace(/\/$/, '')
+          }) || data.data[0] // Fallback to first result
+          
+          homepageMetadata = {
+            title: bestResult.title || new URL(normalizedUrl).hostname,
+            description: bestResult.content?.substring(0, 200) || 'AI-powered search chatbot',
+            favicon: undefined, // Tavily doesn't provide favicons
+            ogImage: undefined // Tavily doesn't provide images in this context
+          }
+        }
+        
+        // Store the search info and redirect to dashboard
+        const siteInfo = {
+          url: normalizedUrl,
+          namespace: data.namespace,
+          resultsFound: data.details?.resultsFound || 0,
+          searchComplete: true,
+          searchDate: new Date().toISOString(),
+          metadata: {
+            title: homepageMetadata.title || new URL(normalizedUrl).hostname,
+            description: homepageMetadata.description || 'AI-powered search chatbot for ' + new URL(normalizedUrl).hostname,
+            favicon: homepageMetadata.favicon,
+            ogImage: homepageMetadata.ogImage
+          }
+        }
+        
+        // Store only metadata for current session
+        sessionStorage.setItem('tavily_current_data', JSON.stringify(siteInfo))
+        
+        // Save index metadata using the storage hook
+        await saveIndex({
+          url: normalizedUrl,
+          namespace: data.namespace,
+          pagesCrawled: data.details?.resultsFound || 0,
+          createdAt: new Date().toISOString(),
+          metadata: {
+            title: homepageMetadata.title || new URL(normalizedUrl).hostname,
+            description: homepageMetadata.description || 'AI-powered search chatbot for ' + new URL(normalizedUrl).hostname,
+            favicon: homepageMetadata.favicon,
+            ogImage: homepageMetadata.ogImage
+          }
+        })
+        
+        // Redirect to chat page
+        router.push(`/chat?namespace=${data.namespace}`)
+      } else {
+        throw new Error(data?.message || 'Failed to create chatbot')
+      }
+    } catch (error) {
+      console.error('Creation error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create chatbot'
+      toast.error(errorMessage)
+    } finally {
+      setLoading(false)
+      setCrawlProgress(null)
+    }
   }
 
-  const features = [
-    {
-      icon: Search,
-      title: 'Tavily Search',
-      description: 'Real-time web search optimized for AI agents with accurate, factual results',
-      color: 'bg-blue-500'
-    },
-    {
-      icon: Brain,
-      title: 'Mem0 Memory',
-      description: 'Persistent conversation memory that learns and adapts to your preferences',
-      color: 'bg-purple-500'
-    },
-    {
-      icon: Zap,
-      title: 'Multi-AI Support',
-                  description: 'Choose from OpenAI, Anthropic, Gemini, and Groq with intelligent fallbacks',
-      color: 'bg-green-500'
-    },
-    {
-      icon: Database,
-      title: 'Appwrite Backend',
-      description: 'Secure authentication, real-time sync, and cloud storage integration',
-      color: 'bg-orange-500'
+  const handleApiKeySubmit = async () => {
+    if (!tavilyApiKey.trim()) {
+      toast.error('Please enter your Tavily API key')
+      return
     }
-  ]
 
-  const examples = [
-    "What are the latest developments in quantum computing?",
-    "Compare the best electric vehicles in 2025",
-    "Explain the impact of AI on healthcare",
-    "What is the current situation in renewable energy?",
-    "How does cryptocurrency regulation work globally?"
-  ]
+    setIsValidatingApiKey(true)
+    
+    try {
+      // Validate API key by making a test request
+      const response = await fetch('/api/tavily/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tavily-API-Key': tavilyApiKey,
+        },
+        body: JSON.stringify({ query: 'test', maxResults: 1 })
+      })
+
+      if (response.ok) {
+        localStorage.setItem('tavily_api_key', tavilyApiKey)
+        setHasTavilyKey(true)
+        setShowApiKeyModal(false)
+        toast.success('API key saved successfully!')
+      } else {
+        toast.error('Invalid API key. Please check your key and try again.')
+      }
+    } catch (error) {
+      console.error('API key validation error:', error)
+      toast.error('Failed to validate API key. Please try again.')
+    } finally {
+      setIsValidatingApiKey(false)
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-white" />
+      <div className="border-b border-orange-100 bg-white/50 backdrop-blur-sm">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">{config.app.name}</h1>
+                <p className="text-xs text-gray-500">Instant AI Chatbots for Any Website</p>
+              </div>
             </div>
-            <h1 className="text-xl font-bold">Tavily Chatbot</h1>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <Link href="/chat">
-              <Button variant="outline" size="sm">
-                <MessageSquare className="w-4 h-4 mr-2" />
-                Start Chat
-              </Button>
-            </Link>
-            <Link href="/dashboard">
-              <Button size="sm">Dashboard</Button>
-            </Link>
+            
+            <div className="flex items-center space-x-3">
+              <Link href="/dashboard">
+                <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
+                  <Database className="w-4 h-4 mr-2" />
+                  My Chatbots
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-16">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Hero Section */}
-        <div className="text-center mb-16">
-          <h2 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
-            AI-Powered Search &{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">
-              Conversation
+        <div className="text-center mb-12">
+          <div className="flex justify-center mb-6">
+            <div className="relative">
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl flex items-center justify-center shadow-lg">
+                <Search className="w-8 h-8 text-white" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                <Sparkles className="w-3 h-3 text-white" />
+              </div>
+            </div>
+          </div>
+          
+          <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">
+            Instant AI Chatbots for{' '}
+            <span className="bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+              Any Website
             </span>
-          </h2>
+          </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Get real-time answers from the web with personalized memory. 
-            Powered by Tavily search, Mem0 memory, and multiple AI providers.
+            Transform any website into a knowledgeable AI assistant. Powered by Tavily search and advanced AI models.
           </p>
+          
+          {/* Features */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-12">
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-orange-100">
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
+                <Search className="w-5 h-5 text-orange-600" />
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">Tavily-Powered Search</h3>
+              <p className="text-sm text-gray-600">Real-time web search optimized for AI applications</p>
+            </div>
+            
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-orange-100">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
+                <Zap className="w-5 h-5 text-green-600" />
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">Instant Creation</h3>
+              <p className="text-sm text-gray-600">From URL to chatbot in under a minute</p>
+            </div>
+            
+            <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-orange-100">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
+                <Sparkles className="w-5 h-5 text-blue-600" />
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">AI Memory</h3>
+              <p className="text-sm text-gray-600">Persistent memory with Mem0 integration</p>
+            </div>
+          </div>
+        </div>
 
-          {/* Quick Search */}
-          <div className="max-w-2xl mx-auto mb-8">
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                placeholder="Ask anything... (e.g., &quot;What&apos;s happening in AI today?&quot;)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleQuickSearch()}
-                className="text-lg py-6"
-              />
-              <Button 
-                onClick={handleQuickSearch}
-                disabled={isLoading || !searchQuery.trim()}
-                className="px-8 py-6"
+        {/* Creation Form */}
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-orange-100 p-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
+                Website URL
+              </label>
+              <div className="relative">
+                <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <Input
+                  id="url"
+                  type="url"
+                  placeholder="https://example.com"
+                  value={url}
+                  onChange={(e) => {
+                    setUrl(e.target.value)
+                    setHasInteracted(true)
+                  }}
+                  className="pl-11 h-12 text-lg border-gray-200 focus:border-orange-300 focus:ring-orange-200"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowSettings(!showSettings)}
+                className="text-gray-600 border-gray-200 hover:bg-gray-50"
               >
-                {isLoading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </Button>
+              
+              <Button
+                type="submit"
+                disabled={loading || isCreationDisabled || !url.trim()}
+                className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-8 h-12"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
                 ) : (
-                  <Search className="w-5 h-5" />
+                  <>
+                    Create Chatbot
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </>
                 )}
               </Button>
             </div>
-          </div>
 
-          {/* Example Queries */}
-          <div className="flex flex-wrap justify-center gap-2 mb-12">
-            {examples.map((example, index) => (
-              <Button
-                key={index}
-                variant="outline"
-                size="sm"
-                onClick={() => setSearchQuery(example)}
-                className="text-sm"
-              >
-                {example}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Features Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
-          {features.map((feature, index) => {
-            const Icon = feature.icon
-            return (
-              <Card key={index} className="text-center border-0 shadow-lg hover:shadow-xl transition-shadow">
-                <CardHeader>
-                  <div className={`w-12 h-12 ${feature.color} rounded-lg flex items-center justify-center mx-auto mb-4`}>
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
-                  <CardTitle className="text-lg">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-sm">
-                    {feature.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-
-        {/* Technology Stack */}
-        <Tabs defaultValue="ai" className="max-w-4xl mx-auto">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="ai">AI Providers</TabsTrigger>
-            <TabsTrigger value="search">Search</TabsTrigger>
-            <TabsTrigger value="memory">Memory</TabsTrigger>
-            <TabsTrigger value="backend">Backend</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="ai" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Multiple AI Providers</CardTitle>
-                <CardDescription>
-                  Intelligent fallback system across leading AI providers
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">OpenAI GPT-4o</Badge>
-                  <Badge variant="secondary">Anthropic Claude 3.5</Badge>
-                  <Badge variant="secondary">Google Gemini 2.0</Badge>
-                  <Badge variant="secondary">Groq Llama</Badge>
+            {/* Settings Panel */}
+            {showSettings && (
+              <div className="border-t pt-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Search Results Limit
+                  </label>
+                  <select
+                    value={pageLimit}
+                    onChange={(e) => setPageLimit(Number(e.target.value))}
+                    className="w-full p-2 border border-gray-200 rounded-lg focus:border-orange-300 focus:ring-orange-200"
+                    disabled={loading}
+                  >
+                    {config.tavily.limitOptions.map((limit) => (
+                      <option key={limit} value={limit}>
+                        {limit} results
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    More results = better knowledge but slower creation
+                  </p>
                 </div>
-                <p className="text-sm text-gray-600 mt-4">
-                  The system automatically selects the best available AI provider based on your configuration,
-                  ensuring reliable responses even if one service is unavailable.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="search" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Tavily Search Engine</CardTitle>
-                <CardDescription>
-                  Purpose-built search for AI agents and LLMs
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">Real-time Results</Badge>
-                  <Badge variant="secondary">AI-Optimized</Badge>
-                  <Badge variant="secondary">Source Attribution</Badge>
-                  <Badge variant="secondary">Content Extraction</Badge>
-                </div>
-                <p className="text-sm text-gray-600 mt-4">
-                  Unlike traditional search APIs, Tavily provides search results specifically optimized for AI consumption,
-                  with clean content extraction and relevance scoring.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="memory" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Mem0 Memory System</CardTitle>
-                <CardDescription>
-                  Persistent, personalized conversation memory
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">User Preferences</Badge>
-                  <Badge variant="secondary">Context Awareness</Badge>
-                  <Badge variant="secondary">Learning Adaptation</Badge>
-                  <Badge variant="secondary">Cross-Session</Badge>
-                </div>
-                <p className="text-sm text-gray-600 mt-4">
-                  The AI remembers your preferences, conversation history, and context across sessions,
-                  providing increasingly personalized and relevant responses over time.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="backend" className="mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Appwrite Backend</CardTitle>
-                <CardDescription>
-                  Complete backend-as-a-service integration
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">Authentication</Badge>
-                  <Badge variant="secondary">Real-time Database</Badge>
-                  <Badge variant="secondary">File Storage</Badge>
-                  <Badge variant="secondary">Cloud Functions</Badge>
-                </div>
-                <p className="text-sm text-gray-600 mt-4">
-                  Secure user management, conversation persistence, and real-time synchronization
-                                      across devices with Appwrite&apos;s comprehensive backend services.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        {/* CTA Section */}
-        <div className="text-center mt-16">
-          <h3 className="text-3xl font-bold text-gray-900 mb-4">
-            Ready to experience the future of search?
-          </h3>
-          <p className="text-lg text-gray-600 mb-8">
-            Start chatting with our AI-powered assistant today.
-          </p>
-          <Link href="/chat">
-            <Button size="lg" className="px-8 py-4 text-lg">
-              <MessageSquare className="w-5 h-5 mr-2" />
-              Start Chatting Now
-            </Button>
-          </Link>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t bg-white/80 backdrop-blur-sm mt-16">
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="flex items-center space-x-2 mb-4 md:mb-0">
-              <div className="w-6 h-6 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                <Sparkles className="w-4 h-4 text-white" />
               </div>
-              <span className="font-semibold">Tavily Chatbot</span>
+            )}
+          </form>
+
+          {/* Progress Display */}
+          {crawlProgress && (
+            <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-orange-900">{crawlProgress.status}</span>
+                <span className="text-sm text-orange-600">
+                  {crawlProgress.pagesScraped} / {crawlProgress.pagesFound}
+                </span>
+              </div>
+              <div className="w-full bg-orange-200 rounded-full h-2">
+                <div
+                  className="bg-gradient-to-r from-orange-500 to-red-500 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min((crawlProgress.pagesScraped / crawlProgress.pagesFound) * 100, 100)}%`,
+                  }}
+                />
+              </div>
+              {crawlProgress.currentPage && (
+                <p className="text-xs text-orange-700 mt-2">{crawlProgress.currentPage}</p>
+              )}
             </div>
-            <div className="flex items-center space-x-6 text-sm text-gray-600">
-              <a href="https://docs.tavily.com" target="_blank" rel="noopener noreferrer" className="hover:text-blue-600">
-                Tavily Docs
-              </a>
-              <a href="https://docs.mem0.ai" target="_blank" rel="noopener noreferrer" className="hover:text-purple-600">
-                Mem0 Docs
-              </a>
-              <a href="https://appwrite.io/docs" target="_blank" rel="noopener noreferrer" className="hover:text-orange-600">
-                Appwrite Docs
-              </a>
+          )}
+
+          {/* Warnings */}
+          {isCreationDisabled && (
+            <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
+                <p className="text-sm text-yellow-800">
+                  Chatbot creation is currently disabled. You can only view existing chatbots.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      </footer>
+      </div>
+
+      {/* API Key Modal */}
+      <Dialog open={showApiKeyModal} onOpenChange={setShowApiKeyModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tavily API Key Required</DialogTitle>
+            <DialogDescription>
+              Please enter your Tavily API key to create chatbots. You can get one for free at{' '}
+              <a 
+                href="https://tavily.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-orange-600 hover:underline"
+              >
+                tavily.com
+              </a>
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <Input
+              placeholder="Enter your Tavily API key"
+              value={tavilyApiKey}
+              onChange={(e) => setTavilyApiKey(e.target.value)}
+              type="password"
+            />
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApiKeyModal(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleApiKeySubmit}
+              disabled={isValidatingApiKey || !tavilyApiKey.trim()}
+            >
+              {isValidatingApiKey ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Validating...
+                </>
+              ) : (
+                'Save Key'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

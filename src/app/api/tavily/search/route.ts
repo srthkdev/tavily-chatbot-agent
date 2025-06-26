@@ -1,94 +1,92 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { serverConfig } from '@/config/tavily.config'
-import { searchWeb } from '@/lib/tavily'
+import { checkRateLimit } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limiting
-    const ratelimit = serverConfig.rateLimits.search
-    if (ratelimit) {
-      const ip = (request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0]
-      const { success, limit, reset, remaining } = await ratelimit.limit(ip)
+    const body = await request.json()
+    const { query, maxResults = 10, searchDepth = 'basic', includeAnswer = true, includeImages = false, includeRawContent = true } = body
+
+    if (!query) {
+      return NextResponse.json({ error: 'Query is required' }, { status: 400 })
+    }
+
+    // Check rate limit
+    const clientIP = request.headers.get('x-forwarded-for') || 'anonymous'
+    const rateLimit = await checkRateLimit('search', clientIP)
+    
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { 
+          error: 'Rate limit exceeded',
+          limit: rateLimit.limit,
+          remaining: rateLimit.remaining,
+          reset: rateLimit.reset,
+        }, 
+        { status: 429 }
+      )
+    }
+
+    // Get API key from environment or request headers
+    const apiKey = process.env.TAVILY_API_KEY || request.headers.get('X-Tavily-API-Key')
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Tavily API key is not configured' },
+        { status: 500 }
+      )
+    }
+
+    // Make request to Tavily API
+    const tavilyResponse = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        query,
+        search_depth: searchDepth,
+        include_answer: includeAnswer,
+        include_images: includeImages,
+        include_raw_content: includeRawContent,
+        max_results: Math.min(maxResults, 20), // Cap at 20 for API limits
+      }),
+    })
+
+    if (!tavilyResponse.ok) {
+      const errorText = await tavilyResponse.text()
+      console.error('Tavily API error:', errorText)
       
-      if (!success) {
+      if (tavilyResponse.status === 401) {
         return NextResponse.json(
-          { error: 'Rate limit exceeded. Please try again later.' },
-          { 
-            status: 429,
-            headers: {
-              'X-RateLimit-Limit': limit.toString(),
-              'X-RateLimit-Remaining': remaining.toString(),
-              'X-RateLimit-Reset': new Date(reset).toISOString(),
-            }
-          }
+          { error: 'Invalid Tavily API key' },
+          { status: 401 }
         )
       }
-    }
-
-    const { 
-      query, 
-      maxResults = 10, 
-      searchDepth = 'basic',
-      includeImages = false,
-      includeRawContent = true,
-      includeAnswer = true,
-      includeDomains,
-      excludeDomains,
-      topic = 'general'
-    } = await request.json()
-
-    if (!query || typeof query !== 'string') {
+      
       return NextResponse.json(
-        { error: 'Search query is required' },
-        { status: 400 }
+        { error: 'Search failed', details: errorText },
+        { status: tavilyResponse.status }
       )
     }
 
-    if (query.trim().length < 2) {
-      return NextResponse.json(
-        { error: 'Search query must be at least 2 characters long' },
-        { status: 400 }
-      )
-    }
-
-    // Perform the search
-    const searchResults = await searchWeb({
-      query: query.trim(),
-      maxResults: Math.min(maxResults, 20), // Cap at 20 results
-      searchDepth,
-      includeImages,
-      includeRawContent,
-      includeAnswer,
-      includeDomains,
-      excludeDomains,
-      topic,
-    })
+    const data = await tavilyResponse.json()
 
     return NextResponse.json({
       success: true,
-      data: searchResults
+      query,
+      answer: data.answer,
+      results: data.results || [],
+      images: data.images || [],
+      searchTime: data.search_time || 0,
     })
 
   } catch (error) {
-    console.error('Search API error:', error)
-    
-    if (error instanceof Error) {
-      if (error.message.includes('TAVILY_API_KEY')) {
-        return NextResponse.json(
-          { error: 'Search service is not configured' },
-          { status: 503 }
-        )
-      }
-      if (error.message.includes('Failed to search web content')) {
-        return NextResponse.json(
-          { error: 'Search service is temporarily unavailable' },
-          { status: 503 }
-        )
-      }
-    }
-
+    console.error('Search error:', error)
     return NextResponse.json(
-      { error: 'Search request failed' },
+      { 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }

@@ -67,56 +67,7 @@ function createRateLimiter(identifier: string, requests = 50, window = '1 d') {
   })
 }
 
-export interface TavilyConfig {
-  app: {
-    name: string
-    url: string
-    logoPath: string
-  }
-  ai: {
-    model: ReturnType<typeof getAIModel> | null
-    temperature: number
-    maxTokens: number
-    systemPrompt: string
-    providers: typeof AI_PROVIDERS
-  }
-  tavily: {
-    maxResults: number
-    searchDepth: 'basic' | 'advanced'
-    includeImages: boolean
-    includeRawContent: boolean
-    includeAnswer: boolean
-  }
-  mem0: {
-    enableUserMemory: boolean
-    memoryRetentionDays: number
-    maxMemoriesPerUser: number
-  }
-  appwrite: {
-    endpoint: string
-    projectId: string
-    databaseId: string
-    collections: {
-      users: string
-      chatbots: string
-      conversations: string
-      messages: string
-    }
-  }
-  rateLimits: {
-    create: ReturnType<typeof createRateLimiter>
-    query: ReturnType<typeof createRateLimiter>
-    search: ReturnType<typeof createRateLimiter>
-  }
-  features: {
-    enableCreation: boolean
-    enableAppwrite: boolean
-    enableMem0: boolean
-    enableRedis: boolean
-  }
-}
-
-const config: TavilyConfig = {
+const config = {
   app: {
     name: 'Tavily Chatbot',
     url: process.env.NEXT_PUBLIC_URL || 'http://localhost:3000',
@@ -127,16 +78,39 @@ const config: TavilyConfig = {
     model: getAIModel(),
     temperature: 0.7,
     maxTokens: 1000,
-    systemPrompt: `You are a helpful AI assistant powered by Tavily search. You can search the web for real-time information and provide accurate, up-to-date responses. When users ask questions, search for relevant information and provide comprehensive answers based on the latest data available.`,
+    systemPrompt: `You are a helpful AI assistant. If a user greets you or engages in small talk, respond politely without referencing any specific website. For questions about website content, answer using ONLY the provided context from Tavily search results. Do not use any other knowledge. If the context isn't sufficient to answer, say so explicitly and suggest searching for more specific information.`,
     providers: AI_PROVIDERS,
   },
 
   tavily: {
     maxResults: 10,
-    searchDepth: 'basic',
+    searchDepth: 'basic' as const,
     includeImages: false,
     includeRawContent: true,
     includeAnswer: true,
+    defaultLimit: 10,
+    maxLimit: 50,
+    minLimit: 5,
+    limitOptions: [5, 10, 20, 50],
+    searchTimeout: 10000,
+    cacheMaxAge: 604800, // 7 days
+  },
+
+  search: {
+    maxResults: 100,
+    maxContextDocs: 10,
+    maxContextLength: 1500,
+    maxSourcesDisplay: 20,
+    snippetLength: 200,
+  },
+
+  storage: {
+    maxIndexes: 50,
+    localStorageKey: 'tavily_chatbot_indexes',
+    redisPrefix: {
+      indexes: 'tavily-chatbot:indexes',
+      index: 'tavily-chatbot:index:',
+    },
   },
 
   mem0: {
@@ -151,7 +125,7 @@ const config: TavilyConfig = {
     databaseId: process.env.APPWRITE_DATABASE_ID || 'tavily-chatbot',
     collections: {
       users: 'users',
-      chatbots: 'chatbots',
+      chatbots: 'chatbots', 
       conversations: 'conversations',
       messages: 'messages',
     },
@@ -168,13 +142,18 @@ const config: TavilyConfig = {
     enableAppwrite: !!(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT && process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID),
     enableMem0: !!process.env.MEM0_API_KEY,
     enableRedis: !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+    enableSearch: !!(process.env.UPSTASH_SEARCH_REST_URL && process.env.UPSTASH_SEARCH_REST_TOKEN),
   },
 }
+
+export type Config = typeof config
 
 // Client-safe config (no AI model initialization)
 export const clientConfig = {
   app: config.app,
   tavily: config.tavily,
+  search: config.search,
+  storage: config.storage,
   mem0: config.mem0,
   appwrite: config.appwrite,
   features: config.features,

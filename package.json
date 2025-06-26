@@ -14,7 +14,7 @@
     "@ai-sdk/anthropic": "^1.2.12",
     "@ai-sdk/google": "^1.2.19",
     "@ai-sdk/groq": "^1.2.9",
-        "@ai-sdk/openai": "^1.3.22",
+    "@ai-sdk/openai": "^1.3.22",
     "@mem0/vercel-ai-provider": "^1.0.6",
     "@radix-ui/react-avatar": "^1.1.10",
     "@radix-ui/react-dialog": "^1.1.14",
@@ -28,6 +28,7 @@
     "@tavily/core": "^0.5.8",
     "@upstash/ratelimit": "^2.0.5",
     "@upstash/redis": "^1.35.0",
+    "@upstash/vector": "^1.2.1",
     "ai": "^4.3.16",
     "appwrite": "^18.1.1",
     "class-variance-authority": "^0.7.1",
@@ -39,7 +40,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sonner": "^2.0.5",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "upstash": "^0.0.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

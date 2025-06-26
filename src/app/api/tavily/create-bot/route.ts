@@ -1,149 +1,230 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { serverConfig } from '@/config/tavily.config'
-import { searchAndCreateBot } from '@/lib/tavily'
-import { createChatbot, getCurrentUser } from '@/lib/appwrite'
-import { cookies } from 'next/headers'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { upsertDocuments, SearchDocument, generateEmbedding } from '@/lib/upstash-search'
+import { saveIndex } from '@/lib/storage'
+import { serverConfig as config } from '@/config/tavily.config'
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limiting
-    const ratelimit = serverConfig.rateLimits.create
-    if (ratelimit) {
-      const ip = (request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0]
-      const { success, limit, reset, remaining } = await ratelimit.limit(ip)
+    // Check if creation is disabled
+    if (!config.features.enableCreation) {
+      return NextResponse.json({ 
+        error: 'Chatbot creation is currently disabled. You can only view existing chatbots.' 
+      }, { status: 403 })
+    }
+
+    let body;
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
+    
+    const { url, maxResults = config.tavily.defaultLimit, searchDepth = config.tavily.searchDepth } = body
+    
+    if (!url) {
+      return NextResponse.json({ error: 'URL is required' }, { status: 400 })
+    }
+
+    // Validate URL
+    try {
+      new URL(url)
+    } catch {
+      return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 })
+    }
+
+    // Check rate limit
+    const clientIP = request.headers.get('x-forwarded-for') || 'anonymous'
+    const rateLimit = await checkRateLimit('create', clientIP)
+    
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { 
+          error: 'Rate limit exceeded',
+          limit: rateLimit.limit,
+          remaining: rateLimit.remaining,
+          reset: rateLimit.reset,
+        }, 
+        { status: 429 }
+      )
+    }
+
+    // Generate unique namespace with timestamp to avoid collisions
+    const baseNamespace = new URL(url).hostname.replace(/\./g, '-')
+    const timestamp = Date.now()
+    const namespace = `${baseNamespace}-${timestamp}`
+    
+    // Get API key from environment or request headers
+    const apiKey = process.env.TAVILY_API_KEY || request.headers.get('X-Tavily-API-Key')
+    if (!apiKey) {
+      return NextResponse.json({ 
+        error: 'Tavily API key is not configured. Please provide your API key.' 
+      }, { status: 500 })
+    }
+
+    // Search for content related to the URL
+    const searchQuery = `site:${new URL(url).hostname} OR ${url}`
+    
+    const tavilyResponse = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        query: searchQuery,
+        search_depth: searchDepth,
+        include_answer: false,
+        include_images: false,
+        include_raw_content: true,
+        max_results: Math.min(maxResults, 50), // Cap for performance
+      }),
+    })
+
+    if (!tavilyResponse.ok) {
+      const errorText = await tavilyResponse.text()
+      console.error('Tavily API error:', errorText)
       
-      if (!success) {
+      if (tavilyResponse.status === 401) {
         return NextResponse.json(
-          { error: 'Rate limit exceeded. Please try again later.' },
-          { 
-            status: 429,
-            headers: {
-              'X-RateLimit-Limit': limit.toString(),
-              'X-RateLimit-Remaining': remaining.toString(),
-              'X-RateLimit-Reset': new Date(reset).toISOString(),
-            }
-          }
+          { error: 'Tavily authentication failed. Please check your API key.' },
+          { status: 401 }
         )
       }
-    }
-
-    const { url, name, description, maxResults = 10 } = await request.json()
-
-    if (!url) {
+      
       return NextResponse.json(
-        { error: 'URL is required' },
-        { status: 400 }
+        { error: 'Failed to search content', details: errorText },
+        { status: tavilyResponse.status }
       )
     }
 
-    // Validate URL format
-    let normalizedUrl: string
+    const searchData = await tavilyResponse.json()
+    const results = searchData.results || []
+
+    if (results.length === 0) {
+      return NextResponse.json({
+        error: 'No content found for the provided URL. Try a different website or check if the URL is accessible.',
+      }, { status: 404 })
+    }
+
+    // Process search results and create documents for vector storage
+    const documents: SearchDocument[] = []
+    
+    for (let index = 0; index < results.length; index++) {
+      const result = results[index]
+      const title = result.title || 'Untitled'
+      const content = result.content || result.raw_content || ''
+      const resultUrl = result.url || url
+      
+      // Create searchable text for embedding
+      const searchableText = `${title} ${content}`.substring(0, 2000) // Limit for embedding
+      
+      try {
+        // Generate embedding for the content
+        const vector = await generateEmbedding(searchableText)
+        
+        documents.push({
+          id: `${namespace}-${index}`,
+          vector,
+          metadata: {
+            namespace,
+            title,
+            url: resultUrl,
+            sourceURL: resultUrl,
+            crawlDate: new Date().toISOString(),
+            pageTitle: title,
+            description: content.substring(0, 200),
+            favicon: undefined,
+            ogImage: undefined,
+            fullContent: content.substring(0, 5000),
+            text: searchableText,
+            score: result.score,
+            publishedDate: result.published_date,
+          }
+        })
+      } catch (embeddingError) {
+        console.error(`Failed to generate embedding for document ${index}:`, embeddingError)
+        // Skip this document but continue with others
+        continue
+      }
+    }
+
+    if (documents.length === 0) {
+      return NextResponse.json({
+        error: 'Failed to process any documents for vector storage.',
+      }, { status: 500 })
+    }
+
+    // Store documents in Upstash Vector DB
     try {
-      normalizedUrl = url.startsWith('http://') || url.startsWith('https://') 
-        ? url 
-        : `https://${url}`
-      new URL(normalizedUrl)
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid URL format' },
-        { status: 400 }
-      )
-    }
-
-    // Check if features are enabled
-    if (!serverConfig.features.enableCreation) {
-      return NextResponse.json(
-        { error: 'Chatbot creation is currently disabled' },
-        { status: 403 }
-      )
-    }
-
-    // Get current user if Appwrite is enabled
-    let userId = null
-    if (serverConfig.features.enableAppwrite) {
-      try {
-        // Set cookies for Appwrite client
-        const cookieStore = await cookies()
-        const sessionCookie = cookieStore.get('appwrite-session')
-        if (sessionCookie) {
-          const user = await getCurrentUser()
-          userId = user?.$id
-        }
-      } catch (error) {
-        console.log('No authenticated user, proceeding without user context')
+      await upsertDocuments(documents)
+      
+      // Verify storage by searching for one document
+      const { searchDocuments } = await import('@/lib/upstash-search')
+      const verifyResult = await searchDocuments('test', namespace, 1)
+      
+      if (verifyResult.length === 0) {
+        console.warn('Documents may not have been stored properly')
       }
+    } catch (upsertError) {
+      console.error('Failed to store documents:', upsertError)
+      throw new Error(`Failed to store documents: ${upsertError instanceof Error ? upsertError.message : 'Unknown error'}`)
     }
 
-    // Extract content using Tavily
-    const tavilyResult = await searchAndCreateBot(normalizedUrl, maxResults)
+    // Find the best result for metadata (preferably the exact URL match)
+    const homepage = results.find((result: any) => {
+      const resultUrl = result.url || ''
+      return resultUrl === url || resultUrl === url + '/' || resultUrl === url.replace(/\/$/, '')
+    }) || results[0]
 
-    // Create chatbot object
-    const chatbotData = {
-      namespace: tavilyResult.namespace,
-      name: name || tavilyResult.title,
-      description: description || tavilyResult.description,
-      url: normalizedUrl,
-      favicon: tavilyResult.favicon,
-      status: 'active' as const,
-      pagesCrawled: tavilyResult.pagesCrawled,
-      userId: userId || 'anonymous',
-      metadata: {
-        content: tavilyResult.content,
+    // Save index metadata
+    try {
+      await saveIndex({
+        url,
+        namespace,
+        pagesCrawled: documents.length,
         createdAt: new Date().toISOString(),
-        lastUpdated: new Date().toISOString(),
-      }
+        metadata: {
+          title: homepage?.title || new URL(url).hostname,
+          description: homepage?.content?.substring(0, 200) || `AI chatbot for ${new URL(url).hostname}`,
+          favicon: undefined,
+          ogImage: undefined
+        }
+      })
+    } catch (saveError) {
+      console.error('Failed to save index metadata:', saveError)
+      // Continue execution - storage error shouldn't fail the entire operation
     }
 
-    // Save to Appwrite if enabled
-    let savedChatbot = null
-    if (serverConfig.features.enableAppwrite && userId) {
-      try {
-        savedChatbot = await createChatbot(chatbotData)
-      } catch (error) {
-        console.error('Failed to save chatbot to Appwrite:', error)
-        // Continue without saving - return the data anyway
-      }
-    }
-
-    // Return success response
     return NextResponse.json({
       success: true,
-      chatbot: savedChatbot || {
-        id: tavilyResult.namespace,
-        ...chatbotData,
-        $id: tavilyResult.namespace,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
+      namespace,
+      message: `Search completed successfully (processed ${documents.length} results)`,
+      details: {
+        url,
+        resultsLimit: maxResults,
+        resultsFound: results.length,
+        documentsProcessed: documents.length,
+        searchDepth: searchDepth
+      },
+      data: results.map((result: any) => ({
+        url: result.url,
+        title: result.title,
+        content: result.content?.substring(0, 500), // Truncate for response
+        published_date: result.published_date,
+        score: result.score
+      }))
     })
 
   } catch (error) {
-    console.error('Error creating chatbot:', error)
+    console.error('Create bot error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
     
-    // Return appropriate error response
-    if (error instanceof Error) {
-      if (error.message.includes('TAVILY_API_KEY')) {
-        return NextResponse.json(
-          { error: 'Search service is not configured. Please contact support.' },
-          { status: 503 }
-        )
-      }
-      if (error.message.includes('Failed to extract content')) {
-        return NextResponse.json(
-          { error: 'Unable to extract content from the provided URL. Please check the URL and try again.' },
-          { status: 400 }
-        )
-      }
-      if (error.message.includes('Failed to search web content')) {
-        return NextResponse.json(
-          { error: 'Search service is temporarily unavailable. Please try again later.' },
-          { status: 503 }
-        )
-      }
-    }
-
     return NextResponse.json(
-      { error: 'Failed to create chatbot. Please try again.' },
+      { 
+        error: 'Failed to create chatbot',
+        details: errorMessage
+      },
       { status: 500 }
     )
   }
