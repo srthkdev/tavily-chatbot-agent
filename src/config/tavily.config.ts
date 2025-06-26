@@ -54,17 +54,29 @@ function createRateLimiter(identifier: string, requests = 50, window = '1 d') {
     return null
   }
   
-  const redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN,
-  })
-  
-  return new Ratelimit({
-    redis,
-    limiter: Ratelimit.fixedWindow(requests, window),
-    analytics: true,
-    prefix: `tavily-chatbot:ratelimit:${identifier}`,
-  })
+  try {
+    // Validate Redis URL format
+    const redisUrl = process.env.UPSTASH_REDIS_REST_URL
+    if (!redisUrl.startsWith('https://')) {
+      console.warn(`⚠️ Invalid Redis URL format for rate limiter '${identifier}'. Expected HTTPS URL, got:`, redisUrl)
+      return null
+    }
+    
+    const redis = new Redis({
+      url: redisUrl,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+    
+    return new Ratelimit({
+      redis,
+      limiter: Ratelimit.fixedWindow(requests, window),
+      analytics: true,
+      prefix: `tavily-chatbot:ratelimit:${identifier}`,
+    })
+  } catch (error) {
+    console.error(`❌ Failed to create rate limiter '${identifier}':`, error)
+    return null
+  }
 }
 
 const config = {

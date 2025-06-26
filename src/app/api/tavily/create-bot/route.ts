@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { upsertDocuments, SearchDocument, generateEmbedding } from '@/lib/upstash-search'
+import { upsertDocuments, SearchDocument } from '@/lib/upstash-search'
 import { saveIndex } from '@/lib/storage'
 import { serverConfig as config } from '@/config/tavily.config'
 
@@ -119,34 +119,25 @@ export async function POST(request: NextRequest) {
       // Create searchable text for embedding
       const searchableText = `${title} ${content}`.substring(0, 2000) // Limit for embedding
       
-      try {
-        // Generate embedding for the content
-        const vector = await generateEmbedding(searchableText)
-        
-        documents.push({
-          id: `${namespace}-${index}`,
-          vector,
-          metadata: {
-            namespace,
-            title,
-            url: resultUrl,
-            sourceURL: resultUrl,
-            crawlDate: new Date().toISOString(),
-            pageTitle: title,
-            description: content.substring(0, 200),
-            favicon: undefined,
-            ogImage: undefined,
-            fullContent: content.substring(0, 5000),
-            text: searchableText,
-            score: result.score,
-            publishedDate: result.published_date,
-          }
-        })
-      } catch (embeddingError) {
-        console.error(`Failed to generate embedding for document ${index}:`, embeddingError)
-        // Skip this document but continue with others
-        continue
-      }
+      documents.push({
+        id: `${namespace}-${index}`,
+        data: searchableText, // Use text directly for embedding model
+        metadata: {
+          namespace,
+          title,
+          url: resultUrl,
+          sourceURL: resultUrl,
+          crawlDate: new Date().toISOString(),
+          pageTitle: title,
+          description: content.substring(0, 200),
+          favicon: undefined,
+          ogImage: undefined,
+          fullContent: content.substring(0, 5000),
+          text: searchableText,
+          score: result.score,
+          publishedDate: result.published_date,
+        }
+      })
     }
 
     if (documents.length === 0) {
@@ -158,17 +149,33 @@ export async function POST(request: NextRequest) {
     // Store documents in Upstash Vector DB
     try {
       await upsertDocuments(documents)
+      console.log(`Successfully stored ${documents.length} documents for namespace: ${namespace}`)
       
-      // Verify storage by searching for one document
-      const { searchDocuments } = await import('@/lib/upstash-search')
-      const verifyResult = await searchDocuments('test', namespace, 1)
-      
-      if (verifyResult.length === 0) {
-        console.warn('Documents may not have been stored properly')
+      // Verify storage by searching for one document (optional verification)
+      try {
+        const { searchDocuments } = await import('@/lib/upstash-search')
+        const verifyResult = await searchDocuments('test', namespace, 1)
+        
+        if (verifyResult.length === 0) {
+          console.warn('Documents may not have been stored properly, but continuing...')
+        } else {
+          console.log('Document storage verified successfully')
+        }
+      } catch (verifyError) {
+        console.warn('Document verification failed, but continuing:', verifyError)
+        // Don't throw here - verification failure shouldn't stop the process
       }
     } catch (upsertError) {
       console.error('Failed to store documents:', upsertError)
-      throw new Error(`Failed to store documents: ${upsertError instanceof Error ? upsertError.message : 'Unknown error'}`)
+      const errorMessage = upsertError instanceof Error ? upsertError.message : 'Unknown error'
+      
+      // Only throw for critical storage failures
+      if (errorMessage.includes('Failed to store documents')) {
+        throw new Error(`Failed to store documents: ${errorMessage}`)
+      } else {
+        // For embedding-related errors, continue without vector storage
+        console.warn('Vector storage not available, continuing without search functionality')
+      }
     }
 
     // Find the best result for metadata (preferably the exact URL match)

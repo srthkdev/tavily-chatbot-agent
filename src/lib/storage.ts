@@ -20,10 +20,23 @@ export interface ChatbotIndex {
 // Initialize Redis client if available
 let redis: Redis | null = null
 if (config.features.enableRedis) {
-  redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL!,
-    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-  })
+  try {
+    // Validate Redis URL format
+    const redisUrl = process.env.UPSTASH_REDIS_REST_URL!
+    if (!redisUrl.startsWith('https://')) {
+      console.warn('⚠️ Invalid Redis URL format. Expected HTTPS URL, got:', redisUrl)
+      console.warn('💡 Please use the HTTPS REST URL from Upstash, not the CLI command')
+    } else {
+      redis = new Redis({
+        url: redisUrl,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+      })
+      console.log('✅ Redis client initialized successfully')
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize Redis client:', error)
+    console.warn('💡 App will continue with localStorage-only storage')
+  }
 }
 
 export class StorageManager {
