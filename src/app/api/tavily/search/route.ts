@@ -1,43 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { searchWeb } from '@/lib/tavily'
 import { serverConfig } from '@/config/tavily.config'
+import { searchWeb } from '@/lib/tavily'
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    // Rate limiting
+    const ratelimit = serverConfig.rateLimits.search
+    if (ratelimit) {
+      const ip = (request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0]
+      const { success, limit, reset, remaining } = await ratelimit.limit(ip)
+      
+      if (!success) {
+        return NextResponse.json(
+          { error: 'Rate limit exceeded. Please try again later.' },
+          { 
+            status: 429,
+            headers: {
+              'X-RateLimit-Limit': limit.toString(),
+              'X-RateLimit-Remaining': remaining.toString(),
+              'X-RateLimit-Reset': new Date(reset).toISOString(),
+            }
+          }
+        )
+      }
+    }
+
     const { 
-      query,
-      maxResults = 10,
+      query, 
+      maxResults = 10, 
       searchDepth = 'basic',
       includeImages = false,
-      includeRawContent = false,
-      includeAnswer = false,
+      includeRawContent = true,
+      includeAnswer = true,
       includeDomains,
       excludeDomains,
       topic = 'general'
-    } = body
+    } = await request.json()
 
-    if (!query) {
-      return NextResponse.json({ error: 'Query is required' }, { status: 400 })
+    if (!query || typeof query !== 'string') {
+      return NextResponse.json(
+        { error: 'Search query is required' },
+        { status: 400 }
+      )
     }
 
-    // Check rate limiting if enabled
-    if (serverConfig.rateLimits.search) {
-      const identifier = request.headers.get('x-forwarded-for') || 'anonymous'
-      const result = await serverConfig.rateLimits.search.limit(identifier)
-      
-      if (!result.success) {
-        return NextResponse.json({ 
-          error: 'Rate limit exceeded',
-          retryAfter: result.reset 
-        }, { status: 429 })
-      }
+    if (query.trim().length < 2) {
+      return NextResponse.json(
+        { error: 'Search query must be at least 2 characters long' },
+        { status: 400 }
+      )
     }
 
     // Perform the search
     const searchResults = await searchWeb({
-      query,
-      maxResults: Math.min(maxResults, serverConfig.tavily.maxResults),
+      query: query.trim(),
+      maxResults: Math.min(maxResults, 20), // Cap at 20 results
       searchDepth,
       includeImages,
       includeRawContent,
@@ -53,16 +70,62 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Tavily search API error:', error)
+    console.error('Search API error:', error)
     
-    if (error instanceof Error && error.message.includes('TAVILY_API_KEY')) {
-      return NextResponse.json({ 
-        error: 'Tavily API key is not configured' 
-      }, { status: 500 })
+    if (error instanceof Error) {
+      if (error.message.includes('TAVILY_API_KEY')) {
+        return NextResponse.json(
+          { error: 'Search service is not configured' },
+          { status: 503 }
+        )
+      }
+      if (error.message.includes('Failed to search web content')) {
+        return NextResponse.json(
+          { error: 'Search service is temporarily unavailable' },
+          { status: 503 }
+        )
+      }
     }
 
-    return NextResponse.json({ 
-      error: 'Failed to perform search' 
-    }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Search request failed' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const query = searchParams.get('q')
+  
+  if (!query) {
+    return NextResponse.json(
+      { error: 'Query parameter "q" is required' },
+      { status: 400 }
+    )
+  }
+
+  // Convert GET request to POST format
+  try {
+    const mockRequest = {
+      json: async () => ({
+        query,
+        maxResults: parseInt(searchParams.get('maxResults') || '10'),
+        searchDepth: searchParams.get('searchDepth') || 'basic',
+        includeImages: searchParams.get('includeImages') === 'true',
+        includeRawContent: searchParams.get('includeRawContent') !== 'false',
+        includeAnswer: searchParams.get('includeAnswer') !== 'false',
+        topic: searchParams.get('topic') || 'general',
+      }),
+      headers: request.headers,
+    } as NextRequest
+
+    return await POST(mockRequest)
+  } catch (error) {
+    console.error('GET search error:', error)
+    return NextResponse.json(
+      { error: 'Search request failed' },
+      { status: 500 }
+    )
   }
 } 

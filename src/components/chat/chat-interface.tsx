@@ -73,7 +73,8 @@ export function ChatInterface({ chatbotId, initialMessage, onMessageSent }: Chat
             role: m.role,
             content: m.content
           })),
-          query: messageToSend,
+          user_id: 'anonymous', // TODO: Get from auth context
+          use_search: true,
           chatbotId
         })
       })
@@ -85,7 +86,7 @@ export function ChatInterface({ chatbotId, initialMessage, onMessageSent }: Chat
       const reader = response.body?.getReader()
       const decoder = new TextDecoder()
 
-             const assistantMessage: Message = {
+      const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: '',
@@ -111,12 +112,13 @@ export function ChatInterface({ chatbotId, initialMessage, onMessageSent }: Chat
               try {
                 const parsed = JSON.parse(data)
                 
-                if (parsed.type === 'sources') {
-                  assistantMessage.sources = parsed.sources
-                } else if (parsed.type === 'content') {
+                if (parsed.type === 'metadata' && parsed.searchResults) {
+                  assistantMessage.sources = parsed.searchResults.sources
+                } else if (parsed.type === 'text') {
                   assistantMessage.content += parsed.content
-                } else if (parsed.type === 'error') {
-                  assistantMessage.content = 'Sorry, I encountered an error while processing your request.'
+                } else if (parsed.type === 'done') {
+                  // Stream complete
+                  break
                 }
 
                 setMessages(prev => prev.map(m => 

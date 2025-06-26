@@ -1,30 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Ratelimit } from '@upstash/ratelimit'
-import { Redis } from '@upstash/redis'
-
-let ratelimit: Ratelimit | null = null
-
-if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-  ratelimit = new Ratelimit({
-    redis: new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    }),
-    limiter: Ratelimit.slidingWindow(5, '1 m'),
-    analytics: true,
-  })
-}
+import { serverConfig } from '@/config/tavily.config'
+import { searchAndCreateBot } from '@/lib/tavily'
+import { createChatbot, getCurrentUser } from '@/lib/appwrite'
+import { cookies } from 'next/headers'
 
 export async function POST(request: NextRequest) {
   try {
     // Rate limiting
+    const ratelimit = serverConfig.rateLimits.create
     if (ratelimit) {
       const ip = (request.headers.get('x-forwarded-for') ?? '127.0.0.1').split(',')[0]
       const { success, limit, reset, remaining } = await ratelimit.limit(ip)
       
       if (!success) {
         return NextResponse.json(
-          { error: 'Rate limit exceeded' },
+          { error: 'Rate limit exceeded. Please try again later.' },
           { 
             status: 429,
             headers: {
@@ -37,7 +27,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { url, name, description } = await request.json()
+    const { url, name, description, maxResults = 10 } = await request.json()
 
     if (!url) {
       return NextResponse.json(
@@ -47,8 +37,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate URL format
+    let normalizedUrl: string
     try {
-      new URL(url)
+      normalizedUrl = url.startsWith('http://') || url.startsWith('https://') 
+        ? url 
+        : `https://${url}`
+      new URL(normalizedUrl)
     } catch {
       return NextResponse.json(
         { error: 'Invalid URL format' },
@@ -56,29 +50,100 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // For now, just create a basic chatbot object
-    // In a full implementation, this would involve web scraping and indexing
-    const result = {
-      id: Math.random().toString(36).substring(2),
-      name: name || `${new URL(url).hostname} Assistant`,
-      description: description || `AI assistant for ${new URL(url).hostname}`,
-      url,
-      status: 'active' as const,
-      provider: 'openai' as const,
-      conversations: 0,
-      lastUsed: new Date(),
-      createdAt: new Date()
+    // Check if features are enabled
+    if (!serverConfig.features.enableCreation) {
+      return NextResponse.json(
+        { error: 'Chatbot creation is currently disabled' },
+        { status: 403 }
+      )
     }
 
+    // Get current user if Appwrite is enabled
+    let userId = null
+    if (serverConfig.features.enableAppwrite) {
+      try {
+        // Set cookies for Appwrite client
+        const cookieStore = await cookies()
+        const sessionCookie = cookieStore.get('appwrite-session')
+        if (sessionCookie) {
+          const user = await getCurrentUser()
+          userId = user?.$id
+        }
+      } catch (error) {
+        console.log('No authenticated user, proceeding without user context')
+      }
+    }
+
+    // Extract content using Tavily
+    const tavilyResult = await searchAndCreateBot(normalizedUrl, maxResults)
+
+    // Create chatbot object
+    const chatbotData = {
+      namespace: tavilyResult.namespace,
+      name: name || tavilyResult.title,
+      description: description || tavilyResult.description,
+      url: normalizedUrl,
+      favicon: tavilyResult.favicon,
+      status: 'active' as const,
+      pagesCrawled: tavilyResult.pagesCrawled,
+      userId: userId || 'anonymous',
+      metadata: {
+        content: tavilyResult.content,
+        createdAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+      }
+    }
+
+    // Save to Appwrite if enabled
+    let savedChatbot = null
+    if (serverConfig.features.enableAppwrite && userId) {
+      try {
+        savedChatbot = await createChatbot(chatbotData)
+      } catch (error) {
+        console.error('Failed to save chatbot to Appwrite:', error)
+        // Continue without saving - return the data anyway
+      }
+    }
+
+    // Return success response
     return NextResponse.json({
       success: true,
-      chatbot: result
+      chatbot: savedChatbot || {
+        id: tavilyResult.namespace,
+        ...chatbotData,
+        $id: tavilyResult.namespace,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
     })
 
   } catch (error) {
     console.error('Error creating chatbot:', error)
+    
+    // Return appropriate error response
+    if (error instanceof Error) {
+      if (error.message.includes('TAVILY_API_KEY')) {
+        return NextResponse.json(
+          { error: 'Search service is not configured. Please contact support.' },
+          { status: 503 }
+        )
+      }
+      if (error.message.includes('Failed to extract content')) {
+        return NextResponse.json(
+          { error: 'Unable to extract content from the provided URL. Please check the URL and try again.' },
+          { status: 400 }
+        )
+      }
+      if (error.message.includes('Failed to search web content')) {
+        return NextResponse.json(
+          { error: 'Search service is temporarily unavailable. Please try again later.' },
+          { status: 503 }
+        )
+      }
+    }
+
     return NextResponse.json(
-      { error: 'Failed to create chatbot' },
+      { error: 'Failed to create chatbot. Please try again.' },
       { status: 500 }
     )
   }
