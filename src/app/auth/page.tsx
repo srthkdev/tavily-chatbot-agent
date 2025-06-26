@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/contexts/auth-context'
 import { LoginForm } from '@/components/auth/login-form'
 import { RegisterForm } from '@/components/auth/register-form'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -9,19 +10,25 @@ import { Sparkles } from 'lucide-react'
 
 export default function AuthPage() {
   const router = useRouter()
+  const { refreshUser } = useAuth()
   const [activeTab, setActiveTab] = useState('login')
 
-  const handleAuthSuccess = () => {
-    // Check if there's a pending chatbot creation
-    const pendingUrl = localStorage.getItem('pending_chatbot_url')
-    if (pendingUrl) {
-      localStorage.removeItem('pending_chatbot_url')
-      // Redirect back to main page with the URL to continue creation
-      router.push(`/?url=${encodeURIComponent(pendingUrl)}`)
-    } else {
-      // Redirect to dashboard after successful authentication
-      router.push('/dashboard')
-    }
+  const handleAuthSuccess = async () => {
+    // Force refresh user data and add delay for cookie propagation
+    setTimeout(async () => {
+      await refreshUser()
+      
+      // Check if there's a pending chatbot creation
+      const pendingUrl = localStorage.getItem('pending_chatbot_url')
+      if (pendingUrl) {
+        localStorage.removeItem('pending_chatbot_url')
+        // Redirect back to main page with the URL to continue creation
+        router.push(`/?url=${encodeURIComponent(pendingUrl)}`)
+      } else {
+        // Redirect to dashboard after successful authentication
+        router.push('/dashboard')
+      }
+    }, 500) // 500ms delay to allow cookie propagation and auth context update
   }
 
   return (

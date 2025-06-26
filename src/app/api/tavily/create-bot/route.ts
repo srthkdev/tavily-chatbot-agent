@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { upsertDocuments, SearchDocument } from '@/lib/upstash-search'
 import { saveIndex } from '@/lib/storage'
-import { serverConfig as config } from '@/config/tavily.config'
-import { getCurrentUser, createChatbot } from '@/lib/appwrite'
+import { serverConfig as config, clientConfig } from '@/config/tavily.config'
+import { Client, Account, Databases, ID } from 'node-appwrite'
 import { cookies } from 'next/headers'
 
 export async function POST(request: NextRequest) {
@@ -26,10 +26,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Create client with session to get current user (using node-appwrite for server-side)
+    const client = new Client()
+    client
+      .setEndpoint(clientConfig.appwrite.endpoint)
+      .setProject(clientConfig.appwrite.projectId)
+
+    // For user operations, use session-only (not API key)
+    client.setSession(sessionCookie.value)
+
+    const account = new Account(client)
+    const databases = new Databases(client)
+
     // Get current user
-    const user = await getCurrentUser()
-    
-    if (!user) {
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
       cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },
@@ -211,16 +224,23 @@ export async function POST(request: NextRequest) {
     // Save chatbot to database
     let chatbot = null
     try {
-      chatbot = await createChatbot({
-        userId: user.$id,
-        namespace,
-        name: homepage?.title || new URL(url).hostname,
-        description: homepage?.content?.substring(0, 200) || `AI chatbot for ${new URL(url).hostname}`,
-        url,
-        favicon: undefined,
-        status: 'active',
-        pagesCrawled: documents.length.toString()
-      })
+      chatbot = await databases.createDocument(
+        clientConfig.appwrite.databaseId,
+        clientConfig.appwrite.collections.chatbots,
+        ID.unique(),
+        {
+          userId: user.$id,
+          namespace,
+          name: homepage?.title || new URL(url).hostname,
+          description: homepage?.content?.substring(0, 200) || `AI chatbot for ${new URL(url).hostname}`,
+          url,
+          favicon: '',
+          status: 'active',
+          pagesCrawled: documents.length.toString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      )
     } catch (dbError) {
       console.error('Failed to save chatbot to database:', dbError)
       // Continue - we'll save to local storage as fallback

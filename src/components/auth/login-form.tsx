@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from 'react'
+import { useAuth } from '@/contexts/auth-context'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +15,7 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
+  const { login } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [formData, setFormData] = useState({
@@ -27,21 +29,9 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
     setError('')
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Login failed')
-      }
-
+      await login(formData.email, formData.password)
       // Success - call callback
       onSuccess?.()
-
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {

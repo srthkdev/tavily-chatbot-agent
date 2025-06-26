@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { signUp, signIn } from '@/lib/appwrite'
+import { Client, Account, Databases, ID } from 'node-appwrite'
+import { clientConfig } from '@/config/tavily.config'
 import { cookies } from 'next/headers'
 
 export async function POST(request: NextRequest) {
@@ -30,15 +31,52 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Create client for server operations (using node-appwrite for server-side)
+    const client = new Client()
+    client
+      .setEndpoint(clientConfig.appwrite.endpoint)
+      .setProject(clientConfig.appwrite.projectId)
+
+    // Use API key for account creation operations
+    if (process.env.APPWRITE_API_KEY) {
+      client.setKey(process.env.APPWRITE_API_KEY)
+    }
+
+    const account = new Account(client)
+
     // Create the user account
-    const user = await signUp(email, password, name)
+    const user = await account.create(ID.unique(), email, password, name)
+    
+    // Sign in the user immediately to get a session
+    const session = await account.createEmailPasswordSession(email, password)
+    
+    // For database operations, create a new client with session (not API key)
+    const userClient = new Client()
+    userClient
+      .setEndpoint(clientConfig.appwrite.endpoint)
+      .setProject(clientConfig.appwrite.projectId)
+      .setSession(session.secret || session.$id)
 
-    // Automatically sign in the user after registration
-    const session = await signIn(email, password)
+    const databases = new Databases(userClient)
+    
+    // Create user profile in database
+    await databases.createDocument(
+      clientConfig.appwrite.databaseId,
+      clientConfig.appwrite.collections.users,
+      ID.unique(),
+      {
+        accountId: user.$id, // Reference to the account
+        email,
+        name,
+        preferences: '{}',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+    )
 
-    // Set session cookie
+    // Set session cookie - use secret for server-side operations
     const cookieStore = await cookies()
-    cookieStore.set('appwrite-session', session.$id, {
+    cookieStore.set('appwrite-session', session.secret || session.$id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',

@@ -69,9 +69,13 @@ export interface Message {
 // Authentication functions
 export async function signUp(email: string, password: string, name: string) {
   try {
+    // Create the account
     const response = await account.create(ID.unique(), email, password, name)
     
-    // Create user profile in database
+    // Sign in the user immediately to get a session
+    await account.createEmailPasswordSession(email, password)
+    
+    // Now create user profile in database (with session active)
     await databases.createDocument(
       clientConfig.appwrite.databaseId,
       clientConfig.appwrite.collections.users,
@@ -79,7 +83,7 @@ export async function signUp(email: string, password: string, name: string) {
       {
         email,
         name,
-        preferences: {},
+        preferences: '{}',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -121,9 +125,18 @@ export async function getCurrentUser() {
       user.$id
     )
     
+    // Parse preferences JSON string to object
+    let preferences = {}
+    try {
+      preferences = profile.preferences ? JSON.parse(profile.preferences) : {}
+    } catch (e) {
+      console.warn('Failed to parse user preferences:', e)
+      preferences = {}
+    }
+    
     return {
       ...user,
-      preferences: profile.preferences || {},
+      preferences,
     }
   } catch (error) {
     console.error('Get current user error:', error)

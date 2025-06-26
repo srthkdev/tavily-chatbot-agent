@@ -66,9 +66,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const result = await response.json()
 
     if (!response.ok) {
+      // Handle rate limit with a more user-friendly message
+      if (response.status === 429) {
+        throw new Error('Too many login attempts. Please wait a few minutes and try again.')
+      }
       throw new Error(result.error || 'Login failed')
     }
 
+    // Small delay to ensure cookie is set before refreshing user
+    await new Promise(resolve => setTimeout(resolve, 100))
     await refreshUser()
   }
 
@@ -82,9 +88,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const result = await response.json()
 
     if (!response.ok) {
+      // Handle rate limit with a more user-friendly message
+      if (response.status === 429) {
+        throw new Error('Too many registration attempts. Please wait a few minutes and try again.')
+      }
       throw new Error(result.error || 'Registration failed')
     }
 
+    // Small delay to ensure cookie is set before refreshing user
+    await new Promise(resolve => setTimeout(resolve, 100))
     await refreshUser()
   }
 

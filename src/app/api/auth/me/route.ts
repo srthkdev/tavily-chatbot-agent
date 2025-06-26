@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/appwrite'
+import { Client, Account, Databases, Query } from 'node-appwrite'
+import { clientConfig } from '@/config/tavily.config'
 import { cookies } from 'next/headers'
 
 export async function GET(request: NextRequest) {
@@ -15,16 +16,45 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Use node-appwrite for server-side operations
+    const client = new Client()
+    client
+      .setEndpoint(clientConfig.appwrite.endpoint)
+      .setProject(clientConfig.appwrite.projectId)
+
+    // For user account operations, use ONLY session (not API key)
+    // API key gives application role which doesn't have account scope
+    client.setSession(sessionCookie.value)
+
+    const account = new Account(client)
+    const databases = new Databases(client)
+
     // Get current user from Appwrite
-    const user = await getCurrentUser()
+    const user = await account.get()
     
-    if (!user) {
-      // Clear invalid session cookie
-      cookieStore.delete('appwrite-session')
+    // Get user profile from database by accountId
+    const profileQuery = await databases.listDocuments(
+      clientConfig.appwrite.databaseId,
+      clientConfig.appwrite.collections.users,
+      [Query.equal('accountId', user.$id)]
+    )
+    
+    if (profileQuery.documents.length === 0) {
       return NextResponse.json(
-        { error: 'Invalid session' },
-        { status: 401 }
+        { error: 'User profile not found' },
+        { status: 404 }
       )
+    }
+    
+    const profile = profileQuery.documents[0]
+    
+    // Parse preferences JSON string to object
+    let preferences = {}
+    try {
+      preferences = profile.preferences ? JSON.parse(profile.preferences) : {}
+    } catch (e) {
+      console.warn('Failed to parse user preferences:', e)
+      preferences = {}
     }
 
     return NextResponse.json({
@@ -33,7 +63,7 @@ export async function GET(request: NextRequest) {
         id: user.$id,
         email: user.email,
         name: user.name,
-        preferences: user.preferences || {},
+        preferences,
       }
     })
 

@@ -16,9 +16,11 @@ export async function POST(request: NextRequest) {
     // Sign in the user
     const session = await signIn(email, password)
 
-    // Set session cookie
+    // Set session cookie - use secret for server-side operations
     const cookieStore = await cookies()
-    cookieStore.set('appwrite-session', session.$id, {
+    const sessionToken = session.secret || session.$id
+    
+    cookieStore.set('appwrite-session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
