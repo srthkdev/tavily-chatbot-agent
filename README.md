@@ -100,11 +100,21 @@ UPSTASH_REDIS_REST_TOKEN=your_redis_token
 
 1. Create a new project in [Appwrite Cloud](https://cloud.appwrite.io)
 2. Note your Project ID and Endpoint
-3. Create a database with these collections:
-   - `users` - User profiles
-   - `chatbots` - Chatbot configurations  
-   - `conversations` - Chat history
-4. Configure authentication providers as needed
+3. Generate an API key with database permissions
+4. Set your environment variables in `.env.local`
+5. Run the automated setup script:
+
+```bash
+npm run setup:appwrite
+```
+
+This will create the required database and collections:
+- `users` - User profiles and preferences
+- `chatbots` - Chatbot configurations and metadata
+- `conversations` - Chat conversation history
+- `messages` - Individual chat messages
+
+6. Configure authentication providers (Email/Password is enabled by default)
 
 ### 5. Run Development Server
 
@@ -115,6 +125,20 @@ npm run dev
 ```
 
 Visit [http://localhost:3000](http://localhost:3000) to see the application.
+
+### 6. First Time Setup
+
+1. **Create an account**: Visit `/auth` to sign up for a new account
+2. **Create your first chatbot**: Use the dashboard to create a chatbot from any website URL
+3. **Start chatting**: Navigate to the chat interface and test your AI assistant
+
+## 🔧 Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run setup:appwrite` - Set up Appwrite database and collections
 
 ## 🏗️ Project Structure
 
