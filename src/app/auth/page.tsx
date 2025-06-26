@@ -12,8 +12,16 @@ export default function AuthPage() {
   const [activeTab, setActiveTab] = useState('login')
 
   const handleAuthSuccess = () => {
-    // Redirect to dashboard after successful authentication
-    router.push('/dashboard')
+    // Check if there's a pending chatbot creation
+    const pendingUrl = localStorage.getItem('pending_chatbot_url')
+    if (pendingUrl) {
+      localStorage.removeItem('pending_chatbot_url')
+      // Redirect back to main page with the URL to continue creation
+      router.push(`/?url=${encodeURIComponent(pendingUrl)}`)
+    } else {
+      // Redirect to dashboard after successful authentication
+      router.push('/dashboard')
+    }
   }
 
   return (

@@ -3,6 +3,8 @@ import { checkRateLimit } from '@/lib/rate-limit'
 import { upsertDocuments, SearchDocument } from '@/lib/upstash-search'
 import { saveIndex } from '@/lib/storage'
 import { serverConfig as config } from '@/config/tavily.config'
+import { getCurrentUser, createChatbot } from '@/lib/appwrite'
+import { cookies } from 'next/headers'
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +13,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Chatbot creation is currently disabled. You can only view existing chatbots.' 
       }, { status: 403 })
+    }
+
+    // Check authentication
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
+    
+    if (!sessionCookie) {
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      )
+    }
+
+    // Get current user
+    const user = await getCurrentUser()
+    
+    if (!user) {
+      cookieStore.delete('appwrite-session')
+      return NextResponse.json(
+        { error: 'Invalid session' },
+        { status: 401 }
+      )
     }
 
     let body;
@@ -184,7 +208,25 @@ export async function POST(request: NextRequest) {
       return resultUrl === url || resultUrl === url + '/' || resultUrl === url.replace(/\/$/, '')
     }) || results[0]
 
-    // Save index metadata
+    // Save chatbot to database
+    let chatbot = null
+    try {
+      chatbot = await createChatbot({
+        userId: user.$id,
+        namespace,
+        name: homepage?.title || new URL(url).hostname,
+        description: homepage?.content?.substring(0, 200) || `AI chatbot for ${new URL(url).hostname}`,
+        url,
+        favicon: undefined,
+        status: 'active',
+        pagesCrawled: documents.length.toString()
+      })
+    } catch (dbError) {
+      console.error('Failed to save chatbot to database:', dbError)
+      // Continue - we'll save to local storage as fallback
+    }
+
+    // Save index metadata to localStorage/Redis as fallback
     try {
       await saveIndex({
         url,
@@ -207,6 +249,18 @@ export async function POST(request: NextRequest) {
       success: true,
       namespace,
       message: `Search completed successfully (processed ${documents.length} results)`,
+      chatbot: chatbot || {
+        url,
+        namespace,
+        pagesCrawled: documents.length,
+        createdAt: new Date().toISOString(),
+        metadata: {
+          title: homepage?.title || new URL(url).hostname,
+          description: homepage?.content?.substring(0, 200) || `AI chatbot for ${new URL(url).hostname}`,
+          favicon: undefined,
+          ogImage: undefined
+        }
+      },
       details: {
         url,
         resultsLimit: maxResults,

@@ -37,7 +37,7 @@ export interface Chatbot {
   url?: string
   favicon?: string
   status: 'active' | 'inactive' | 'processing'
-  pagesCrawled: number
+  pagesCrawled: string
   createdAt: string
   updatedAt: string
 }
@@ -48,7 +48,7 @@ export interface Conversation {
   chatbotId: string
   title: string
   lastMessage?: string
-  messageCount: number
+  messageCount: string
   createdAt: string
   updatedAt: string
 }
@@ -233,6 +233,7 @@ export async function createConversation(data: Omit<Conversation, '$id' | 'creat
       ID.unique(),
       {
         ...data,
+        messageCount: data.messageCount || '0',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }
@@ -337,9 +338,10 @@ export async function addMessage(data: Omit<Message, '$id' | 'createdAt'>) {
     
     // Update conversation metadata
     const conversation = await getConversation(data.conversationId)
+    const currentCount = parseInt(conversation.messageCount || '0')
     await updateConversation(data.conversationId, {
       lastMessage: data.content.substring(0, 100),
-      messageCount: (conversation.messageCount || 0) + 1,
+      messageCount: (currentCount + 1).toString(),
     })
     
     return message

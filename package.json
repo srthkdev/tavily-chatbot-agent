@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "setup:appwrite": "node scripts/setup-appwrite.js",
+    "setup:db": "node scripts/setup-appwrite-db.js",
     "setup:check": "node scripts/simple-setup.js"
   },
   "dependencies": {
@@ -51,6 +52,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.3.4",
+    "node-appwrite": "^17.0.0",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.4",
     "typescript": "^5"

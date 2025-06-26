@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { useStorage } from "@/hooks/useStorage"
 import { clientConfig as config } from "@/config/tavily.config"
+import { useAuth } from "@/contexts/auth-context"
 import { 
   Globe, 
   MessageSquare, 
@@ -38,13 +39,52 @@ import {
 export default function DashboardPage() {
   const router = useRouter()
   const { indexes, loading, error, deleteIndex, refresh } = useStorage()
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
   const [deleteModal, setDeleteModal] = useState<{ show: boolean; namespace?: string; title?: string }>({ show: false })
   const [copiedItem, setCopiedItem] = useState<string | null>(null)
+  const [chatbots, setChatbots] = useState<any[]>([])
+  const [chatbotsLoading, setChatbotsLoading] = useState(true)
 
-  const filteredIndexes = indexes.filter(index => 
+  // Redirect to auth if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/auth')
+    }
+  }, [authLoading, isAuthenticated, router])
+
+  // Load chatbots from database
+  useEffect(() => {
+    const loadChatbots = async () => {
+      if (!isAuthenticated) return
+      
+      try {
+        setChatbotsLoading(true)
+        const response = await fetch('/api/chatbots')
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success) {
+            setChatbots(result.data)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load chatbots:', error)
+      } finally {
+        setChatbotsLoading(false)
+      }
+    }
+
+    loadChatbots()
+  }, [isAuthenticated])
+
+  // Combine chatbots from database and localStorage
+  const allChatbots = [...chatbots, ...indexes.filter(index => 
+    !chatbots.some(bot => bot.namespace === index.namespace)
+  )]
+
+  const filteredIndexes = allChatbots.filter(index => 
     !searchQuery || 
-    index.metadata.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (index.metadata?.title || index.name)?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     index.url.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -84,7 +124,7 @@ export default function DashboardPage() {
     }
   }
 
-  if (loading) {
+  if (authLoading || chatbotsLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50 flex items-center justify-center">
         <div className="text-center">
@@ -93,6 +133,10 @@ export default function DashboardPage() {
         </div>
       </div>
     )
+  }
+
+  if (!isAuthenticated) {
+    return null // Will redirect to auth
   }
 
   return (
@@ -110,9 +154,9 @@ export default function DashboardPage() {
               </Link>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">My Chatbots</h1>
-                <p className="text-sm text-gray-500">
-                  {indexes.length} chatbot{indexes.length !== 1 ? 's' : ''} created
-                </p>
+                              <p className="text-sm text-gray-500">
+                {allChatbots.length} chatbot{allChatbots.length !== 1 ? 's' : ''} created
+              </p>
               </div>
             </div>
             
@@ -170,15 +214,15 @@ export default function DashboardPage() {
               <Database className="w-8 h-8 text-gray-400" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {indexes.length === 0 ? 'No chatbots yet' : 'No matching chatbots'}
+              {allChatbots.length === 0 ? 'No chatbots yet' : 'No matching chatbots'}
             </h3>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              {indexes.length === 0 
+              {allChatbots.length === 0 
                 ? 'Create your first AI chatbot by entering a website URL.' 
                 : 'Try adjusting your search query to find your chatbots.'
               }
             </p>
-            {indexes.length === 0 && (
+            {allChatbots.length === 0 && (
               <Link href="/">
                 <Button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white">
                   <Plus className="w-4 h-4 mr-2" />
@@ -198,15 +242,15 @@ export default function DashboardPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-lg font-semibold text-gray-900 truncate">
-                        {index.metadata.title || new URL(index.url).hostname}
+                        {index.name || index.metadata?.title || new URL(index.url).hostname}
                       </CardTitle>
                       <CardDescription className="text-sm text-gray-600 mt-1 line-clamp-2">
-                        {index.metadata.description || `AI chatbot for ${new URL(index.url).hostname}`}
+                        {index.description || index.metadata?.description || `AI chatbot for ${new URL(index.url).hostname}`}
                       </CardDescription>
                     </div>
-                    {index.metadata.favicon && (
+                    {(index.favicon || index.metadata?.favicon) && (
                       <img 
-                        src={index.metadata.favicon} 
+                        src={index.favicon || index.metadata?.favicon} 
                         alt="Favicon" 
                         className="w-6 h-6 rounded-sm flex-shrink-0 ml-2"
                         onError={(e) => { e.currentTarget.style.display = 'none' }}
@@ -243,7 +287,7 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex items-center text-gray-500">
                         <Clock className="w-4 h-4 mr-1" />
-                        <span>{formatDate(index.createdAt)}</span>
+                        <span>{formatDate(index.createdAt || index.$createdAt)}</span>
                       </div>
                     </div>
 
@@ -274,7 +318,7 @@ export default function DashboardPage() {
                         onClick={() => setDeleteModal({ 
                           show: true, 
                           namespace: index.namespace,
-                          title: index.metadata.title || new URL(index.url).hostname
+                          title: index.name || index.metadata?.title || new URL(index.url).hostname
                         })}
                         className="px-3 text-red-600 hover:text-red-700 hover:bg-red-50"
                       >

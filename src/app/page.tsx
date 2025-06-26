@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useStorage } from "@/hooks/useStorage"
 import { clientConfig as config } from "@/config/tavily.config"
+import { useAuth } from "@/contexts/auth-context"
 import { 
   Globe, 
   ArrowRight, 
@@ -38,6 +39,7 @@ export default function TavilyPage() {
   const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
   const urlParam = searchParams.get('url')
   const { saveIndex } = useStorage()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   
   const [url, setUrl] = useState(urlParam || 'https://docs.tavily.com/')
   const [hasInteracted, setHasInteracted] = useState(false)
@@ -81,9 +83,36 @@ export default function TavilyPage() {
       })
   }, [])
 
+  // Handle authenticated user returning with pending chatbot creation
+  useEffect(() => {
+    if (isAuthenticated && urlParam && !hasInteracted) {
+      // Auto-trigger creation if user just authenticated with pending URL
+      const pendingUrl = localStorage.getItem('pending_chatbot_url')
+      if (pendingUrl === urlParam) {
+        localStorage.removeItem('pending_chatbot_url')
+        setHasInteracted(true)
+        // Small delay to ensure UI is ready
+        setTimeout(() => {
+          const form = document.querySelector('form')
+          if (form) {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+          }
+        }, 100)
+      }
+    }
+  }, [isAuthenticated, urlParam, hasInteracted])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!url) return
+
+    // Check authentication first
+    if (!isAuthenticated) {
+      // Store the URL in localStorage so we can continue after auth
+      localStorage.setItem('pending_chatbot_url', url)
+      router.push('/auth')
+      return
+    }
 
     // Check if we have Tavily API key
     if (!hasTavilyKey && !localStorage.getItem('tavily_api_key')) {
@@ -230,8 +259,8 @@ export default function TavilyPage() {
         // Store only metadata for current session
         sessionStorage.setItem('tavily_current_data', JSON.stringify(siteInfo))
         
-        // Save index metadata using the storage hook
-        await saveIndex({
+        // Use chatbot data from response if available, otherwise use metadata
+        const chatbotData = (data as any).chatbot || {
           url: normalizedUrl,
           namespace: data.namespace,
           pagesCrawled: data.details?.resultsFound || 0,
@@ -242,7 +271,18 @@ export default function TavilyPage() {
             favicon: homepageMetadata.favicon,
             ogImage: homepageMetadata.ogImage
           }
-        })
+        }
+        
+        // Save index metadata using the storage hook
+        await saveIndex(chatbotData)
+        
+        // Store chatbot data temporarily in sessionStorage for immediate access
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem(`chatbot-${data.namespace}`, JSON.stringify(chatbotData))
+        }
+        
+        // Small delay to ensure storage is synchronized before navigation
+        await new Promise(resolve => setTimeout(resolve, 100))
         
         // Redirect to chat page
         router.push(`/chat?namespace=${data.namespace}`)

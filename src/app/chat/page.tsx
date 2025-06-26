@@ -184,7 +184,7 @@ function MarkdownContent({ content, onSourceClick, isStreaming = false }: {
 function ChatContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { getIndex } = useStorage()
+  const { getIndex, refresh } = useStorage()
   
   const namespace = searchParams.get('namespace')
   const [chatbot, setChatbot] = useState<any>(null)
@@ -198,17 +198,81 @@ function ChatContent() {
   const [autoScroll, setAutoScroll] = useState(true)
 
   useEffect(() => {
-    if (namespace) {
-      const botData = getIndex(namespace)
-      if (botData) {
-        setChatbot(botData)
+    const loadChatbot = async () => {
+      if (namespace) {
+        // First try to get the chatbot from sessionStorage (temporary data from creation)
+        const tempChatbotData = typeof window !== 'undefined' 
+          ? sessionStorage.getItem(`chatbot-${namespace}`) 
+          : null
+        
+        if (tempChatbotData) {
+          try {
+            const parsedData = JSON.parse(tempChatbotData)
+            setChatbot(parsedData)
+            setError(null)
+            // Clean up temporary data
+            sessionStorage.removeItem(`chatbot-${namespace}`)
+            return
+          } catch (e) {
+            console.error('Failed to parse temporary chatbot data:', e)
+          }
+        }
+        
+        // Try to get the chatbot from persistent storage
+        let botData = getIndex(namespace)
+        
+        if (botData) {
+          setChatbot(botData)
+          setError(null)
+        } else {
+          // If not found, try to fetch from database by namespace
+          try {
+            const response = await fetch(`/api/chatbots`)
+            if (response.ok) {
+              const result = await response.json()
+              if (result.success) {
+                const dbChatbot = result.data.find((bot: any) => bot.namespace === namespace)
+                if (dbChatbot) {
+                  setChatbot(dbChatbot)
+                  setError(null)
+                  return
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Failed to fetch chatbot from database:', error)
+          }
+          
+          // If not found, refresh storage and try again
+          await refresh()
+          
+          // Try again after refresh
+          botData = getIndex(namespace)
+          if (botData) {
+            setChatbot(botData)
+            setError(null)
+          } else {
+            // Final retry after a short delay in case storage is still syncing
+            const retryTimer = setTimeout(() => {
+              const retryBotData = getIndex(namespace)
+              if (retryBotData) {
+                setChatbot(retryBotData)
+                setError(null)
+              } else {
+                setError('Chatbot not found')
+              }
+            }, 500)
+            
+            return () => clearTimeout(retryTimer)
+          }
+        }
       } else {
-        setError('Chatbot not found')
+        setError('No chatbot specified')
       }
-    } else {
-      setError('No chatbot specified')
     }
-  }, [namespace, getIndex])
+    
+    loadChatbot()
+  }, [namespace, getIndex, refresh])
 
   useEffect(() => {
     const el = scrollAreaRef.current
