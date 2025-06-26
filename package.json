@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "setup:appwrite": "node scripts/setup-appwrite.js",
+    "setup:check": "node scripts/simple-setup.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.2.12",
