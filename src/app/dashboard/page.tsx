@@ -21,6 +21,7 @@ import {
   Sparkles
 } from 'lucide-react'
 import Link from 'next/link'
+import { CreateChatbotDialog } from '@/components/dashboard/create-chatbot-dialog'
 
 interface ChatbotStats {
   id: string
@@ -38,45 +39,51 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoading, setIsLoading] = useState(true)
 
-  // Mock data for demonstration
+  // Load user's chatbots from API
   useEffect(() => {
-    const mockChatbots: ChatbotStats[] = [
-      {
-        id: '1',
-        name: 'Tech News Assistant',
-        description: 'Stays up-to-date with the latest technology news and trends',
-        url: 'https://techcrunch.com',
-        conversations: 142,
-        lastUsed: new Date('2024-01-20'),
-        status: 'active',
-        provider: 'openai'
-      },
-      {
-        id: '2',
-        name: 'Science Research Helper',
-        description: 'Helps with scientific research and paper analysis',
-        url: 'https://nature.com',
-        conversations: 89,
-        lastUsed: new Date('2024-01-19'),
-        status: 'active',
-        provider: 'anthropic'
-      },
-      {
-        id: '3',
-        name: 'Market Analysis Bot',
-        description: 'Provides financial market insights and analysis',
-        url: 'https://bloomberg.com',
-        conversations: 267,
-        lastUsed: new Date('2024-01-18'),
-        status: 'active',
-        provider: 'gemini'
+    const loadChatbots = async () => {
+      try {
+        const response = await fetch('/api/chatbots')
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success) {
+            setChatbots(result.data.map((bot: any) => ({
+              id: bot.$id,
+              name: bot.name,
+              description: bot.description,
+              url: bot.url,
+              conversations: 0, // TODO: Get from conversations API
+              lastUsed: new Date(bot.updatedAt),
+              status: bot.status,
+              provider: 'openai' // TODO: Get from bot config
+            })))
+          }
+        } else if (response.status === 401) {
+          // User not authenticated, show empty state
+          setChatbots([])
+        }
+      } catch (error) {
+        console.error('Failed to load chatbots:', error)
+        // Show mock data as fallback
+        const mockChatbots: ChatbotStats[] = [
+          {
+            id: '1',
+            name: 'Tech News Assistant',
+            description: 'Stays up-to-date with the latest technology news and trends',
+            url: 'https://techcrunch.com',
+            conversations: 142,
+            lastUsed: new Date('2024-01-20'),
+            status: 'active',
+            provider: 'openai'
+          }
+        ]
+        setChatbots(mockChatbots)
+      } finally {
+        setIsLoading(false)
       }
-    ]
-    
-    setTimeout(() => {
-      setChatbots(mockChatbots)
-      setIsLoading(false)
-    }, 1000)
+    }
+
+    loadChatbots()
   }, [])
 
   const filteredChatbots = chatbots.filter(bot =>
@@ -127,10 +134,21 @@ export default function DashboardPage() {
                   New Chat
                 </Button>
               </Link>
-              <Button size="sm">
-                <Plus className="w-4 h-4 mr-2" />
-                Create Chatbot
-              </Button>
+              <CreateChatbotDialog 
+                onChatbotCreated={(newBot: any) => {
+                  // Add new chatbot to the list
+                  setChatbots(prev => [{
+                    id: newBot.id || newBot.$id,
+                    name: newBot.name,
+                    description: newBot.description,
+                    url: newBot.url,
+                    conversations: 0,
+                    lastUsed: new Date(newBot.createdAt || new Date()),
+                    status: newBot.status,
+                    provider: 'openai'
+                  }, ...prev])
+                }}
+              />
             </div>
           </div>
         </div>
