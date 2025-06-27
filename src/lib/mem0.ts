@@ -98,8 +98,18 @@ export async function searchMemories(
       headers: getMem0Headers(),
     })
     
+    // Gracefully handle authentication or other HTTP errors without throwing so that
+    // the calling code can continue operating even when Mem0 is mis-configured or
+    // temporarily unavailable.
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      if (response.status === 401) {
+        console.warn('⚠️  Mem0 request returned 401 (unauthorized). Please verify that MEM0_API_KEY is set correctly.')
+        console.warn('⚠️  API Key present:', !!process.env.MEM0_API_KEY)
+        console.warn('⚠️  API Key prefix:', process.env.MEM0_API_KEY?.substring(0, 10) + '...')
+      } else {
+        console.warn(`⚠️  Mem0 search failed with status: ${response.status}`)
+      }
+      return []
     }
     
     const result = await response.json()
@@ -134,7 +144,12 @@ export async function getUserMemories(
     })
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      if (response.status === 401) {
+        console.warn('⚠️  Mem0 request returned 401 (unauthorized) while fetching user memories.')
+      } else {
+        console.warn(`⚠️  Mem0 get memories failed with status: ${response.status}`)
+      }
+      return []
     }
     
     const result = await response.json()

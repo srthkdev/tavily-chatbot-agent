@@ -201,7 +201,13 @@ export async function getChatbot(chatbotId: string) {
       clientConfig.appwrite.collections.chatbots,
       chatbotId
     )
-  } catch (error) {
+  } catch (error: any) {
+    // If the document is not found, return null so callers can handle it gracefully
+    if (error?.code === 404 || error?.type === 'document_not_found') {
+      console.warn(`Chatbot not found: ${chatbotId}`)
+      return null
+    }
+
     console.error('Get chatbot error:', error)
     throw error
   }

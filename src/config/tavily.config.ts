@@ -8,9 +8,9 @@ import { Redis } from '@upstash/redis'
 // AI provider configuration
 const AI_PROVIDERS = {
   openai: {
-    model: openai('gpt-4o'),
+    model: openai('gpt-4o-mini'),
     enabled: !!process.env.OPENAI_API_KEY,
-    name: 'OpenAI GPT-4o'
+    name: 'OpenAI GPT-4o Mini'
   },
   anthropic: {
     model: anthropic('claude-3-5-sonnet-20241022'),
@@ -18,14 +18,14 @@ const AI_PROVIDERS = {
     name: 'Anthropic Claude 3.5 Sonnet'
   },
   gemini: {
-    model: google('gemini-2.0-flash'),
+    model: google('gemini-1.5-flash'),
     enabled: !!process.env.GOOGLE_API_KEY,
-    name: 'Google Gemini 2.0 Flash'
+    name: 'Google Gemini 1.5 Flash'
   },
   groq: {
-    model: groq('meta-llama/llama-4-scout-17b-16e-instruct'),
+    model: groq('llama-3.3-70b-versatile'),
     enabled: !!process.env.GROQ_API_KEY,
-    name: 'Groq Llama 4 Scout'
+    name: 'Groq Llama 3.3 70B'
   },
 }
 
@@ -36,11 +36,11 @@ function getAIModel() {
     return null
   }
   
-  // Priority: OpenAI > Anthropic > Gemini > Groq
-  if (AI_PROVIDERS.openai.enabled) return AI_PROVIDERS.openai.model
-  if (AI_PROVIDERS.anthropic.enabled) return AI_PROVIDERS.anthropic.model
-  if (AI_PROVIDERS.gemini.enabled) return AI_PROVIDERS.gemini.model
+  // Priority: Groq > Anthropic > OpenAI > Gemini (testing Groq first for reliability)
   if (AI_PROVIDERS.groq.enabled) return AI_PROVIDERS.groq.model
+  if (AI_PROVIDERS.anthropic.enabled) return AI_PROVIDERS.anthropic.model
+  if (AI_PROVIDERS.openai.enabled) return AI_PROVIDERS.openai.model
+  if (AI_PROVIDERS.gemini.enabled) return AI_PROVIDERS.gemini.model
   
   throw new Error('No AI provider configured. Please set at least one API key: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, or GROQ_API_KEY')
 }

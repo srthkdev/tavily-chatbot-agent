@@ -37,6 +37,12 @@ export default function ChatbotAdminPage() {
                         } else {
                             setError(result.error || 'Chatbot not found')
                         }
+                    } else if (response.status === 404) {
+                        setError('Chatbot not found')
+                        // Auto-redirect to dashboard after 3 seconds
+                        setTimeout(() => {
+                            window.location.href = '/dashboard'
+                        }, 3000)
                     } else {
                         setError('Failed to fetch chatbot data')
                     }
@@ -152,6 +158,11 @@ export default function ChatbotAdminPage() {
                 <AlertCircle className="w-12 h-12 text-destructive mb-4" />
                 <h2 className="text-xl font-semibold mb-2">Error</h2>
                 <p className="text-muted-foreground mb-4">{error}</p>
+                {error === 'Chatbot not found' && (
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Redirecting to dashboard in 3 seconds...
+                    </p>
+                )}
                 <Link href="/dashboard">
                     <Button variant="outline">
                         <ArrowLeft className="w-4 h-4 mr-2" />

@@ -5,9 +5,9 @@ import { nanoid } from 'nanoid'
 import { cookies } from 'next/headers'
 import { Client, Account, Databases } from 'node-appwrite'
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
     try {
-        const chatbotId = params.id
+        const { id: chatbotId } = await context.params
         
         // Check authentication
         const cookieStore = await cookies()
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return NextResponse.json({ error: 'No data provided' }, { status: 400 })
 
     } catch (error) {
-        console.error('Data ingestion error:', error)
+        console.warn('Data ingestion error:', error)
         return NextResponse.json({ error: 'Failed to add data' }, { status: 500 })
     }
 } 

@@ -3,9 +3,9 @@ import { Client, Account, Databases } from 'node-appwrite'
 import { clientConfig } from '@/config/tavily.config'
 import { cookies } from 'next/headers'
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
     try {
-        const chatbotId = params.id
+        const { id: chatbotId } = await context.params
         
         // Check authentication
         const cookieStore = await cookies()
@@ -63,7 +63,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         return NextResponse.json({ success: true, publicUrl })
 
     } catch (error) {
-        console.error('Publish error:', error)
+        console.warn('Publish error:', error)
         return NextResponse.json({ error: 'Failed to update chatbot' }, { status: 500 })
     }
 } 

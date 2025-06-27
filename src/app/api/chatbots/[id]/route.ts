@@ -6,10 +6,10 @@ import { clientConfig } from '@/config/tavily.config'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const chatbotId = params.id
+    const { id: chatbotId } = await context.params
 
     // Check authentication
     const cookieStore = await cookies()
@@ -46,8 +46,15 @@ export async function GET(
     // Get chatbot
     const chatbot = await getChatbot(chatbotId)
 
+    if (!chatbot) {
+      return NextResponse.json(
+        { error: 'Chatbot not found' },
+        { status: 404 }
+      )
+    }
+
     // Check if user owns this chatbot
-    if (chatbot.userId !== user.$id) {
+    if (chatbot!.userId !== user.$id) {
       return NextResponse.json(
         { error: 'Access denied' },
         { status: 403 }
@@ -60,7 +67,7 @@ export async function GET(
     })
 
   } catch (error) {
-    console.error('Get chatbot error:', error)
+    console.warn('Get chatbot error:', error)
     return NextResponse.json(
       { error: 'Chatbot not found' },
       { status: 404 }
@@ -70,10 +77,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const chatbotId = params.id
+    const { id: chatbotId } = await context.params
     const updateData = await request.json()
 
     // Check authentication
@@ -111,7 +118,14 @@ export async function PUT(
     // Get chatbot to verify ownership
     const chatbot = await getChatbot(chatbotId)
 
-    if (chatbot.userId !== user.$id) {
+    if (!chatbot) {
+      return NextResponse.json(
+        { error: 'Chatbot not found' },
+        { status: 404 }
+      )
+    }
+
+    if (chatbot!.userId !== user.$id) {
       return NextResponse.json(
         { error: 'Access denied' },
         { status: 403 }
@@ -131,7 +145,7 @@ export async function PUT(
     })
 
   } catch (error) {
-    console.error('Update chatbot error:', error)
+    console.warn('Update chatbot error:', error)
     return NextResponse.json(
       { error: 'Failed to update chatbot' },
       { status: 500 }
@@ -141,7 +155,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
     // Check authentication
@@ -177,7 +191,7 @@ export async function DELETE(
       )
     }
 
-    const chatbotId = params.id
+    const { id: chatbotId } = await context.params
 
     // First, check if the chatbot exists and belongs to the user
     try {
@@ -254,7 +268,7 @@ export async function DELETE(
     }
 
   } catch (error) {
-    console.error('Delete chatbot error:', error)
+    console.warn('Delete chatbot error:', error)
     return NextResponse.json(
       { error: 'Failed to delete chatbot' },
       { status: 500 }

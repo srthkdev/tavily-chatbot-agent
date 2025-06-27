@@ -341,7 +341,22 @@ export default function DashboardPage() {
                           variant="ghost" 
                           size="sm"
                           className="flex-1"
-                          onClick={() => router.push(`/admin/${chatbot.$id}`)}
+                          onClick={() => {
+                            // Check if chatbot exists before navigating
+                            fetch(`/api/chatbots/${chatbot.$id}`)
+                              .then(response => {
+                                if (response.ok) {
+                                  router.push(`/admin/${chatbot.$id}`)
+                                } else {
+                                  toast.error('Chatbot not found')
+                                  // Refresh the list
+                                  window.location.reload()
+                                }
+                              })
+                              .catch(() => {
+                                toast.error('Error accessing chatbot')
+                              })
+                          }}
                         >
                           <Settings className="w-4 h-4 mr-2" />
                           Manage

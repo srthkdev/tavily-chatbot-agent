@@ -60,7 +60,17 @@ export async function POST(request: NextRequest) {
         }
 
         // Get AI model
-        const model = serverConfig.ai.model
+        let model
+        try {
+            model = serverConfig.ai.model
+        } catch (error) {
+            console.error('❌ AI Model error:', error)
+            return NextResponse.json(
+                { error: 'AI model configuration error: ' + (error instanceof Error ? error.message : 'Unknown error') },
+                { status: 500 }
+            )
+        }
+        
         if (!model) {
             return NextResponse.json(
                 { error: 'No AI provider configured' },
@@ -83,97 +93,54 @@ export async function POST(request: NextRequest) {
         const tavilyApiKey = process.env.TAVILY_API_KEY
         const tavilyClient = tavilyApiKey ? tavily({ apiKey: tavilyApiKey }) : null
 
-        // Define tools
-        const tools = {
-            searchWeb: tool({
-                description: 'Search the web for current information on any topic. Use this when the user asks about recent events, current information, or topics not covered in the knowledge base.',
-                parameters: z.object({
-                    query: z.string().describe('The search query')
-                }),
-                execute: async ({ query }) => {
-                    if (!tavilyClient) {
-                        return { error: 'Web search not available - Tavily API key not configured' }
-                    }
-                    
-                    try {
-                        const response = await tavilyClient.search(query, {
-                            searchDepth: 'basic',
-                            includeAnswer: true,
-                            maxResults: Math.min(maxResults, serverConfig.search.maxContextDocs)
-                        })
-                        
-                        const webSources = response.results.map((result: any, index: number) => ({
-                            id: `web-${index}`,
-                            url: result.url,
-                            title: result.title,
-                            snippet: result.content?.substring(0, serverConfig.search.snippetLength) || '',
-                            score: 1.0,
-                            index: index + 1
-                        }))
+        // Search functions (without tools to avoid Groq compatibility issues)
+        async function performWebSearch(query: string) {
+            if (!tavilyClient) return null
+            try {
+                const response = await tavilyClient.search(query, {
+                    searchDepth: 'basic',
+                    includeAnswer: true,
+                    maxResults: Math.min(maxResults, serverConfig.search.maxContextDocs)
+                })
+                
+                const webSources = response.results.map((result: any, index: number) => ({
+                    id: `web-${index}`,
+                    url: result.url,
+                    title: result.title,
+                    snippet: result.content?.substring(0, serverConfig.search.snippetLength) || '',
+                    score: 1.0,
+                    index: index + 1
+                }))
 
-                        contextSources = [...contextSources, ...webSources]
-                        
-                        return {
-                            results: response.results.map((result: any) => ({
-                                title: result.title,
-                                url: result.url,
-                                content: result.content
-                            })),
-                            answer: response.answer
-                        }
-                    } catch (error) {
-                        return { error: `Web search failed: ${error}` }
-                    }
-                }
-            }),
-            searchKnowledgeBase: tool({
-                description: 'Search the knowledge base for information related to the uploaded documents or website content. Use this when the user asks about specific content from the chatbot\'s knowledge base.',
-                parameters: z.object({
-                    query: z.string().describe('The search query')
-                }),
-                execute: async ({ query }) => {
-                    if (!namespace) {
-                        return { error: 'No knowledge base available for this chatbot' }
-                    }
-                    
-                    try {
-                        const results = await searchDocuments(
-                            query,
-                            namespace,
-                            Math.min(maxResults, serverConfig.search.maxContextDocs)
-                        )
+                contextSources = [...contextSources, ...webSources]
+                return response
+            } catch (error) {
+                console.error('Web search error:', error)
+                return null
+            }
+        }
 
-                        if (results.length > 0) {
-                            const vectorSources = results.map((result, index) => ({
-                                id: result.id,
-                                url: result.metadata.sourceURL || result.metadata.url,
-                                title: result.metadata.pageTitle || result.metadata.title,
-                                snippet: result.metadata.fullContent?.substring(0, serverConfig.search.snippetLength) || '',
-                                score: result.score,
-                                index: contextSources.length + index + 1
-                            }))
+        // Disable tools for now since Groq might not support them properly
+        const tools = {}
 
-                            contextSources = [...contextSources, ...vectorSources]
-                            
-                            return {
-                                results: results.map((result: any) => ({
-                                    title: result.metadata.title || 'Document',
-                                    url: result.metadata.sourceURL || result.metadata.url,
-                                    content: result.metadata.fullContent?.substring(0, 1000) || result.metadata.text?.substring(0, 1000)
-                                }))
-                            }
-                        }
-                        
-                        return { results: [] }
-                    } catch (error) {
-                        return { error: `Knowledge base search failed: ${error}` }
-                    }
-                }
-            })
+        // Auto-search for certain types of questions
+        const searchKeywords = ['weather', 'news', 'current', 'today', 'latest', 'recent', 'now', 'what is happening']
+        const shouldSearch = useWebSearch || searchKeywords.some(keyword => 
+            lastMessage.content.toLowerCase().includes(keyword)
+        )
+        
+        let searchContext = ''
+        if (shouldSearch && tavilyClient) {
+            const searchResponse = await performWebSearch(lastMessage.content)
+            if (searchResponse) {
+                searchContext = `\n\nBased on current web search results:\n${searchResponse.results.map((r: any) => 
+                    `- ${r.title}: ${r.content?.substring(0, 200)}...`
+                ).join('\n')}`
+            }
         }
 
         // Prepare system prompt with memory context
-        let systemPrompt = serverConfig.ai.systemPrompt
+        let systemPrompt = serverConfig.ai.systemPrompt + searchContext
         if (memoryContext) {
             systemPrompt = `${memoryContext}\n\n${systemPrompt}\n\nFor any facts or information you provide, you must cite the source using the [index] notation when sources are available.`
         } else {
@@ -181,33 +148,45 @@ export async function POST(request: NextRequest) {
         }
 
         let fullResponse = ''
-        const result = await streamText({
-            model,
-            messages: [
-                { role: 'system', content: systemPrompt },
-                ...messages
-            ],
-            tools,
-            maxTokens: serverConfig.ai.maxTokens,
-            temperature: serverConfig.ai.temperature,
-            onFinish: async (event) => {
-                fullResponse = event.text
-                
-                // Add conversation to memory
-                if (mem0Enabled) {
-                    await addConversationTurn(
-                        lastMessage.content,
-                        fullResponse,
-                        { user_id: userId }
-                    ).catch(e => console.error('Failed to add conversation to memory:', e));
-                }
-            },
-        })
+        let result
+        try {
+            result = await streamText({
+                model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    ...messages
+                ],
+                tools,
+                maxTokens: serverConfig.ai.maxTokens,
+                temperature: serverConfig.ai.temperature,
+                onFinish: async (event) => {
+                    fullResponse = event.text
+                    
+                    // Add conversation to memory
+                    if (mem0Enabled) {
+                        await addConversationTurn(
+                            lastMessage.content,
+                            fullResponse,
+                            { user_id: userId }
+                        ).catch(e => console.error('Failed to add conversation to memory:', e));
+                    }
+                },
+            })
+
+        } catch (error) {
+            console.error('❌ StreamText error:', error)
+            return NextResponse.json(
+                { error: 'AI streaming error: ' + (error instanceof Error ? error.message : 'Unknown error') },
+                { status: 500 }
+            )
+        }
 
         const response = new Response(result.toDataStreamResponse().body, {
             headers: {
                 'Content-Type': 'text/plain; charset=utf-8',
                 'X-Sources': contextSources.length > 0 ? JSON.stringify(contextSources) : '',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
             }
         })
 
