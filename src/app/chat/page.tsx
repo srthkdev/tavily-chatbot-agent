@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useStorage } from "@/hooks/useStorage"
+
 import { clientConfig as config } from "@/config/tavily.config"
 import { 
   Send, 
@@ -184,7 +184,7 @@ function MarkdownContent({ content, onSourceClick, isStreaming = false }: {
 function ChatContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { getIndex, refresh } = useStorage()
+
   
   const namespace = searchParams.get('namespace')
   const [chatbot, setChatbot] = useState<any>(null)
@@ -199,80 +199,37 @@ function ChatContent() {
 
   useEffect(() => {
     const loadChatbot = async () => {
-      if (namespace) {
-        // First try to get the chatbot from sessionStorage (temporary data from creation)
-        const tempChatbotData = typeof window !== 'undefined' 
-          ? sessionStorage.getItem(`chatbot-${namespace}`) 
-          : null
-        
-        if (tempChatbotData) {
-          try {
-            const parsedData = JSON.parse(tempChatbotData)
-            setChatbot(parsedData)
-            setError(null)
-            // Clean up temporary data
-            sessionStorage.removeItem(`chatbot-${namespace}`)
-            return
-          } catch (e) {
-            console.error('Failed to parse temporary chatbot data:', e)
-          }
-        }
-        
-        // Try to get the chatbot from persistent storage
-        let botData = getIndex(namespace)
-        
-        if (botData) {
-          setChatbot(botData)
-          setError(null)
-        } else {
-          // If not found, try to fetch from database by namespace
-          try {
-            const response = await fetch(`/api/chatbots`)
-            if (response.ok) {
-              const result = await response.json()
-              if (result.success) {
-                const dbChatbot = result.data.find((bot: any) => bot.namespace === namespace)
-                if (dbChatbot) {
-                  setChatbot(dbChatbot)
-                  setError(null)
-                  return
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Failed to fetch chatbot from database:', error)
-          }
-          
-          // If not found, refresh storage and try again
-          await refresh()
-          
-          // Try again after refresh
-          botData = getIndex(namespace)
-          if (botData) {
-            setChatbot(botData)
-            setError(null)
-          } else {
-            // Final retry after a short delay in case storage is still syncing
-            const retryTimer = setTimeout(() => {
-              const retryBotData = getIndex(namespace)
-              if (retryBotData) {
-                setChatbot(retryBotData)
-                setError(null)
-              } else {
-                setError('Chatbot not found')
-              }
-            }, 500)
-            
-            return () => clearTimeout(retryTimer)
-          }
-        }
-      } else {
+      if (!namespace) {
         setError('No chatbot specified')
+        return
+      }
+
+      try {
+        // Fetch chatbot from database by namespace
+        const response = await fetch(`/api/chatbots`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success) {
+            const dbChatbot = result.data.find((bot: any) => bot.namespace === namespace)
+            if (dbChatbot) {
+              setChatbot(dbChatbot)
+              setError(null)
+              return
+            }
+          }
+        }
+        
+        // If not found in database
+        setError('Chatbot not found. It may have been deleted or you may not have access to it.')
+        
+      } catch (error) {
+        console.error('Failed to fetch chatbot from database:', error)
+        setError('Failed to load chatbot. Please try again.')
       }
     }
     
     loadChatbot()
-  }, [namespace, getIndex, refresh])
+  }, [namespace])
 
   useEffect(() => {
     const el = scrollAreaRef.current
@@ -470,9 +427,9 @@ function ChatContent() {
                 </Button>
               </Link>
               <div className="flex items-center space-x-3">
-                {chatbot.metadata.favicon && (
+                {chatbot.favicon && (
                   <img 
-                    src={chatbot.metadata.favicon} 
+                    src={chatbot.favicon} 
                     alt="Favicon" 
                     className="w-6 h-6 rounded-sm"
                     onError={(e) => { e.currentTarget.style.display = 'none' }}
@@ -480,7 +437,7 @@ function ChatContent() {
                 )}
                 <div>
                   <h1 className="text-lg font-semibold text-gray-900">
-                    {chatbot.metadata.title || new URL(chatbot.url).hostname}
+                    {chatbot.name || new URL(chatbot.url).hostname}
                   </h1>
                   <p className="text-sm text-gray-500 flex items-center">
                     <Globe className="w-3 h-3 mr-1" />
@@ -526,7 +483,7 @@ function ChatContent() {
                   Start a conversation
                 </h3>
                 <p className="text-gray-600 mb-6 max-w-md mx-auto">
-                  Ask me anything about {chatbot.metadata.title || new URL(chatbot.url).hostname}. 
+                  Ask me anything about {chatbot.name || new URL(chatbot.url).hostname}. 
                   I can help you find information from the website content.
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center">

@@ -221,8 +221,8 @@ export async function POST(request: NextRequest) {
       return resultUrl === url || resultUrl === url + '/' || resultUrl === url.replace(/\/$/, '')
     }) || results[0]
 
-    // Save chatbot to database
-    let chatbot = null
+    // Save chatbot to database (required - don't continue if this fails)
+    let chatbot
     try {
       chatbot = await databases.createDocument(
         clientConfig.appwrite.databaseId,
@@ -241,52 +241,31 @@ export async function POST(request: NextRequest) {
           updatedAt: new Date().toISOString(),
         }
       )
+      
+      console.log('✅ Chatbot saved to database successfully:', chatbot.$id)
+      
     } catch (dbError) {
-      console.error('Failed to save chatbot to database:', dbError)
-      // Continue - we'll save to local storage as fallback
-    }
-
-    // Save index metadata to localStorage/Redis as fallback
-    try {
-      await saveIndex({
-        url,
-        namespace,
-        pagesCrawled: documents.length,
-        createdAt: new Date().toISOString(),
-        metadata: {
-          title: homepage?.title || new URL(url).hostname,
-          description: homepage?.content?.substring(0, 200) || `AI chatbot for ${new URL(url).hostname}`,
-          favicon: undefined,
-          ogImage: undefined
-        }
-      })
-    } catch (saveError) {
-      console.error('Failed to save index metadata:', saveError)
-      // Continue execution - storage error shouldn't fail the entire operation
+      console.error('❌ Critical: Failed to save chatbot to database:', dbError)
+      
+      // If database save fails, this is a critical error - don't create a chatbot
+      return NextResponse.json({
+        error: 'Failed to save chatbot to database. Please try again.',
+        details: dbError instanceof Error ? dbError.message : 'Database error'
+      }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       namespace,
-      message: `Search completed successfully (processed ${documents.length} results)`,
-      chatbot: chatbot || {
-        url,
-        namespace,
-        pagesCrawled: documents.length,
-        createdAt: new Date().toISOString(),
-        metadata: {
-          title: homepage?.title || new URL(url).hostname,
-          description: homepage?.content?.substring(0, 200) || `AI chatbot for ${new URL(url).hostname}`,
-          favicon: undefined,
-          ogImage: undefined
-        }
-      },
+      message: `Chatbot created successfully! Processed ${documents.length} results.`,
+      chatbot,
       details: {
         url,
         resultsLimit: maxResults,
         resultsFound: results.length,
         documentsProcessed: documents.length,
-        searchDepth: searchDepth
+        searchDepth: searchDepth,
+        chatbotId: chatbot.$id
       },
       data: results.map((result: any) => ({
         url: result.url,

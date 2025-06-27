@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser, getChatbot, updateChatbot, deleteChatbot } from '@/lib/appwrite'
 import { cookies } from 'next/headers'
+import { Client, Account, Databases, Query } from 'node-appwrite'
+import { clientConfig } from '@/config/tavily.config'
 
 export async function GET(
   request: NextRequest,
@@ -122,8 +124,6 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const chatbotId = params.id
-
     // Check authentication
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get('appwrite-session')
@@ -135,10 +135,21 @@ export async function DELETE(
       )
     }
 
+    // Create client with session
+    const client = new Client()
+    client
+      .setEndpoint(clientConfig.appwrite.endpoint)
+      .setProject(clientConfig.appwrite.projectId)
+      .setSession(sessionCookie.value)
+
+    const account = new Account(client)
+    const databases = new Databases(client)
+
     // Get current user
-    const user = await getCurrentUser()
-    
-    if (!user) {
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
       cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },
@@ -146,23 +157,81 @@ export async function DELETE(
       )
     }
 
-    // Get chatbot to verify ownership
-    const chatbot = await getChatbot(chatbotId)
+    const chatbotId = params.id
 
-    if (chatbot.userId !== user.$id) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
+    // First, check if the chatbot exists and belongs to the user
+    try {
+      const chatbot = await databases.getDocument(
+        clientConfig.appwrite.databaseId,
+        clientConfig.appwrite.collections.chatbots,
+        chatbotId
       )
+
+      // Verify ownership
+      if (chatbot.userId !== user.$id) {
+        return NextResponse.json(
+          { error: 'Access denied. You can only delete your own chatbots.' },
+          { status: 403 }
+        )
+      }
+
+      // Delete all conversations for this chatbot
+      const conversations = await databases.listDocuments(
+        clientConfig.appwrite.databaseId,
+        clientConfig.appwrite.collections.conversations,
+        [
+          Query.equal('chatbotId', chatbotId)
+        ]
+      )
+
+      // Delete all messages for each conversation
+      for (const conversation of conversations.documents) {
+        const messages = await databases.listDocuments(
+          clientConfig.appwrite.databaseId,
+          clientConfig.appwrite.collections.messages,
+          [
+            Query.equal('conversationId', conversation.$id)
+          ]
+        )
+
+        // Delete messages
+        for (const message of messages.documents) {
+          await databases.deleteDocument(
+            clientConfig.appwrite.databaseId,
+            clientConfig.appwrite.collections.messages,
+            message.$id
+          )
+        }
+
+        // Delete conversation
+        await databases.deleteDocument(
+          clientConfig.appwrite.databaseId,
+          clientConfig.appwrite.collections.conversations,
+          conversation.$id
+        )
+      }
+
+      // Finally, delete the chatbot
+      await databases.deleteDocument(
+        clientConfig.appwrite.databaseId,
+        clientConfig.appwrite.collections.chatbots,
+        chatbotId
+      )
+
+      return NextResponse.json({
+        success: true,
+        message: 'Chatbot deleted successfully'
+      })
+
+    } catch (error: any) {
+      if (error.code === 404) {
+        return NextResponse.json(
+          { error: 'Chatbot not found' },
+          { status: 404 }
+        )
+      }
+      throw error
     }
-
-    // Delete chatbot
-    await deleteChatbot(chatbotId)
-
-    return NextResponse.json({
-      success: true,
-      message: 'Chatbot deleted successfully'
-    })
 
   } catch (error) {
     console.error('Delete chatbot error:', error)

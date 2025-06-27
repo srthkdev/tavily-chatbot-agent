@@ -284,8 +284,13 @@ export default function TavilyPage() {
         // Small delay to ensure storage is synchronized before navigation
         await new Promise(resolve => setTimeout(resolve, 100))
         
-        // Redirect to chat page
-        router.push(`/chat?namespace=${data.namespace}`)
+        // Success notification
+        toast.success('Chatbot created successfully! Redirecting to dashboard...')
+        
+        // Redirect to dashboard to see the new chatbot
+        setTimeout(() => {
+          router.push('/dashboard')
+        }, 1000)
       } else {
         throw new Error(data?.message || 'Failed to create chatbot')
       }

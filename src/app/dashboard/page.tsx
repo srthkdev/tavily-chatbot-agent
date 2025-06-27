@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { useStorage } from "@/hooks/useStorage"
+
 import { clientConfig as config } from "@/config/tavily.config"
 import { useAuth } from "@/contexts/auth-context"
 import { 
@@ -24,7 +24,7 @@ import {
   Settings,
   Copy,
   Check,
-  AlertCircle
+
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -38,7 +38,7 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { indexes, loading, error, deleteIndex, refresh } = useStorage()
+
   const { isAuthenticated, isLoading: authLoading, user } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
   const [deleteModal, setDeleteModal] = useState<{ show: boolean; namespace?: string; title?: string }>({ show: false })
@@ -77,22 +77,36 @@ export default function DashboardPage() {
     loadChatbots()
   }, [isAuthenticated])
 
-  // Combine chatbots from database and localStorage
-  const allChatbots = [...chatbots, ...indexes.filter(index => 
-    !chatbots.some(bot => bot.namespace === index.namespace)
-  )]
+  // Only use database chatbots (no localStorage fallback)
+  const allChatbots = chatbots
 
-  const filteredIndexes = allChatbots.filter(index => 
+  const filteredIndexes = allChatbots.filter(chatbot => 
     !searchQuery || 
-    (index.metadata?.title || index.name)?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    index.url.toLowerCase().includes(searchQuery.toLowerCase())
+    chatbot.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    chatbot.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    chatbot.url?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const handleDelete = async (namespace: string) => {
+  const handleDelete = async (chatbotId: string) => {
     try {
-      await deleteIndex(namespace)
-      toast.success('Chatbot deleted successfully')
-      setDeleteModal({ show: false })
+      const response = await fetch(`/api/chatbots/${chatbotId}`, {
+        method: 'DELETE',
+      })
+      
+      if (response.ok) {
+        // Refresh the chatbots list
+        const updatedResponse = await fetch('/api/chatbots')
+        if (updatedResponse.ok) {
+          const result = await updatedResponse.json()
+          if (result.success) {
+            setChatbots(result.data)
+          }
+        }
+        toast.success('Chatbot deleted successfully')
+        setDeleteModal({ show: false })
+      } else {
+        throw new Error('Failed to delete chatbot')
+      }
     } catch (error) {
       console.error('Delete error:', error)
       toast.error('Failed to delete chatbot')
@@ -188,8 +202,25 @@ export default function DashboardPage() {
             </div>
             <Button
               variant="outline"
-              onClick={refresh}
-              disabled={loading}
+              onClick={async () => {
+                setChatbotsLoading(true)
+                try {
+                  const response = await fetch('/api/chatbots')
+                  if (response.ok) {
+                    const result = await response.json()
+                    if (result.success) {
+                      setChatbots(result.data)
+                      toast.success('Chatbots refreshed')
+                    }
+                  }
+                } catch (error) {
+                  console.error('Failed to refresh chatbots:', error)
+                  toast.error('Failed to refresh chatbots')
+                } finally {
+                  setChatbotsLoading(false)
+                }
+              }}
+              disabled={chatbotsLoading}
               className="shrink-0"
             >
               <Database className="w-4 h-4 mr-2" />
@@ -197,14 +228,7 @@ export default function DashboardPage() {
             </Button>
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center">
-                <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
-                <p className="text-sm text-red-800">{error}</p>
-              </div>
-            </div>
-          )}
+
         </div>
 
         {/* Chatbots Grid */}
@@ -233,24 +257,24 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredIndexes.map((index) => (
+            {filteredIndexes.map((chatbot) => (
               <Card 
-                key={index.namespace} 
+                key={chatbot.$id} 
                 className="group hover:shadow-lg transition-all duration-200 border-orange-100 hover:border-orange-200 bg-white/80 backdrop-blur-sm"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <CardTitle className="text-lg font-semibold text-gray-900 truncate">
-                        {index.name || index.metadata?.title || new URL(index.url).hostname}
+                        {chatbot.name || new URL(chatbot.url || '').hostname}
                       </CardTitle>
                       <CardDescription className="text-sm text-gray-600 mt-1 line-clamp-2">
-                        {index.description || index.metadata?.description || `AI chatbot for ${new URL(index.url).hostname}`}
+                        {chatbot.description || `AI chatbot for ${new URL(chatbot.url || '').hostname}`}
                       </CardDescription>
                     </div>
-                    {(index.favicon || index.metadata?.favicon) && (
+                    {chatbot.favicon && (
                       <img 
-                        src={index.favicon || index.metadata?.favicon} 
+                        src={chatbot.favicon} 
                         alt="Favicon" 
                         className="w-6 h-6 rounded-sm flex-shrink-0 ml-2"
                         onError={(e) => { e.currentTarget.style.display = 'none' }}
@@ -264,14 +288,14 @@ export default function DashboardPage() {
                     {/* URL */}
                     <div className="flex items-center text-sm text-gray-600">
                       <Globe className="w-4 h-4 mr-2 flex-shrink-0" />
-                      <span className="truncate">{index.url}</span>
+                      <span className="truncate">{chatbot.url}</span>
                       <Button
                         variant="ghost"
                         size="sm"
                         className="ml-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => copyToClipboard(index.url, `url-${index.namespace}`)}
+                        onClick={() => copyToClipboard(chatbot.url || '', `url-${chatbot.$id}`)}
                       >
-                        {copiedItem === `url-${index.namespace}` ? (
+                        {copiedItem === `url-${chatbot.$id}` ? (
                           <Check className="w-3 h-3 text-green-600" />
                         ) : (
                           <Copy className="w-3 h-3" />
@@ -283,17 +307,27 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center text-gray-600">
                         <Database className="w-4 h-4 mr-1" />
-                        <span>{index.pagesCrawled} results</span>
+                        <span>{chatbot.pagesCrawled} results</span>
                       </div>
                       <div className="flex items-center text-gray-500">
                         <Clock className="w-4 h-4 mr-1" />
-                        <span>{formatDate(index.createdAt || index.$createdAt)}</span>
+                        <span>{formatDate(chatbot.createdAt)}</span>
                       </div>
+                    </div>
+
+                    {/* Status Badge */}
+                    <div className="flex items-center">
+                      <Badge 
+                        variant={chatbot.status === 'active' ? 'default' : 'secondary'}
+                        className="text-xs"
+                      >
+                        {chatbot.status}
+                      </Badge>
                     </div>
 
                     {/* Actions */}
                     <div className="flex items-center space-x-2 pt-2">
-                      <Link href={`/chat?namespace=${index.namespace}`} className="flex-1">
+                      <Link href={`/chat?namespace=${chatbot.namespace}`} className="flex-1">
                         <Button 
                           className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white"
                           size="sm"
@@ -306,7 +340,7 @@ export default function DashboardPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => window.open(index.url, '_blank')}
+                        onClick={() => window.open(chatbot.url, '_blank')}
                         className="px-3"
                       >
                         <ExternalLink className="w-4 h-4" />
@@ -317,8 +351,8 @@ export default function DashboardPage() {
                         size="sm"
                         onClick={() => setDeleteModal({ 
                           show: true, 
-                          namespace: index.namespace,
-                          title: index.name || index.metadata?.title || new URL(index.url).hostname
+                          namespace: chatbot.$id,
+                          title: chatbot.name || new URL(chatbot.url || '').hostname
                         })}
                         className="px-3 text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
