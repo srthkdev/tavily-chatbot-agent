@@ -327,15 +327,26 @@ export default function DashboardPage() {
 
                     {/* Actions */}
                     <div className="flex items-center space-x-2 pt-2">
-                      <Link href={`/chat?namespace=${chatbot.namespace}`} className="flex-1">
+                      <div className="flex items-center gap-2 mt-4">
                         <Button 
-                          className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white"
-                          size="sm"
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => router.push(`/chat?namespace=${chatbot.namespace}&name=${encodeURIComponent(chatbot.name || '')}`)}
                         >
                           <MessageSquare className="w-4 h-4 mr-2" />
                           Chat
                         </Button>
-                      </Link>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          className="flex-1"
+                          onClick={() => router.push(`/admin/${chatbot.$id}`)}
+                        >
+                          <Settings className="w-4 h-4 mr-2" />
+                          Manage
+                        </Button>
+                      </div>
                       
                       <Button
                         variant="outline"

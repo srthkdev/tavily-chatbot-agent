@@ -1,287 +1,173 @@
 "use client"
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useChat } from 'ai/react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-// import { Badge } from '@/components/ui/badge' // Not used in this component
-import { Send, Bot, User, Search, ExternalLink, Loader2 } from 'lucide-react'
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  sources?: Array<{
-    title: string
-    url: string
-    snippet: string
-  }>
-  timestamp: Date
-}
+import { Send, Bot, User, Loader2, AlertCircle } from 'lucide-react'
+import type { Message } from 'ai'
+import { Source, SourceCitation } from './source-citation'
+import { MarkdownRenderer } from './markdown-renderer'
 
 interface ChatInterfaceProps {
   chatbotId?: string
-  initialMessage?: string
-  onMessageSent?: (message: string) => void
+  namespace?: string
+  useWebSearch?: boolean
+  maxResults?: number
 }
 
-export function ChatInterface({ chatbotId, initialMessage, onMessageSent }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+export function ChatInterface({ chatbotId, namespace, useWebSearch = false, maxResults = 5 }: ChatInterfaceProps) {
+  const [sourcesForMessages, setSourcesForMessages] = useState<Record<string, Source[]>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  useEffect(() => {
-    if (initialMessage) {
-      handleSend(initialMessage)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialMessage])
-
-  const handleSend = async (message?: string) => {
-    const messageToSend = message || input.trim()
-    if (!messageToSend || isLoading) return
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: messageToSend,
-      timestamp: new Date()
-    }
-
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
-    setIsLoading(true)
-
-    // Call onMessageSent callback if provided
-    onMessageSent?.(messageToSend)
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...messages, userMessage].map(m => ({
-            role: m.role,
-            content: m.content
-          })),
-          user_id: 'anonymous', // TODO: Get from auth context
-          use_search: true,
-          chatbotId
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to get response')
-      }
-
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: '',
-        sources: [],
-        timestamp: new Date()
-      }
-
-      setMessages(prev => [...prev, assistantMessage])
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          const chunk = decoder.decode(value)
-          const lines = chunk.split('\n').filter(line => line.trim())
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6)
-              if (data === '[DONE]') break
-
-              try {
-                const parsed = JSON.parse(data)
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages } = useChat({
+    api: '/api/chat',
+    body: {
+      namespace: namespace,
+      useWebSearch: useWebSearch || !namespace, // Use web search if no namespace or explicitly enabled
+      maxResults: maxResults,
+    },
+    onResponse: async (response) => {
+      // Handle sources from response headers
+      const sourcesHeader = response.headers.get('x-sources')
+      if (sourcesHeader) {
+        try {
+          const sources = JSON.parse(sourcesHeader)
+          if (sources && sources.length > 0) {
+            // Wait a bit for the message to be added to the messages array
+            setTimeout(() => {
+              setMessages(currentMessages => {
+                const newMessages = [...currentMessages]
+                const latestAssistantMessage = newMessages
+                  .slice()
+                  .reverse()
+                  .find(m => m.role === 'assistant')
                 
-                if (parsed.type === 'metadata' && parsed.searchResults) {
-                  assistantMessage.sources = parsed.searchResults.sources
-                } else if (parsed.type === 'text') {
-                  assistantMessage.content += parsed.content
-                } else if (parsed.type === 'done') {
-                  // Stream complete
-                  break
+                if (latestAssistantMessage) {
+                  setSourcesForMessages(prev => ({
+                    ...prev,
+                    [latestAssistantMessage.id]: sources,
+                  }))
                 }
-
-                setMessages(prev => prev.map(m => 
-                  m.id === assistantMessage.id ? { ...assistantMessage } : m
-                ))
-              } catch (e) {
-                console.error('Error parsing chunk:', e)
-              }
-            }
+                return newMessages
+              })
+            }, 100)
           }
+        } catch (error) {
+          console.error('Error parsing sources:', error)
         }
       }
-    } catch (error) {
+    },
+    onError: (error) => {
       console.error('Chat error:', error)
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, errorMessage])
-    } finally {
-      setIsLoading(false)
-    }
-  }
+    },
+  })
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
-    }
-  }
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   return (
     <div className="flex flex-col h-full">
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {messages.length === 0 && (
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 && !isLoading && (
           <div className="text-center py-12">
-            <Bot className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-600 mb-2">
+            <Bot className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">
               Start a conversation
             </h3>
-            <p className="text-gray-500">
-              Ask me anything! I can search the web and provide real-time answers.
+            <p className="text-muted-foreground">
+              {namespace 
+                ? "Ask me anything about the uploaded content! I can also search the web for additional information."
+                : "Ask me anything! I can search the web for current information."
+              }
             </p>
           </div>
         )}
 
-        {messages.map((message) => (
-          <div key={message.id} className="flex gap-4">
-            <div className="flex-shrink-0">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                message.role === 'user' 
-                  ? 'bg-blue-600' 
-                  : 'bg-gradient-to-br from-purple-600 to-blue-600'
+        {messages.map((message: Message) => (
+          <div key={message.id} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            {message.role === 'assistant' && (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/10 text-primary flex-shrink-0">
+                    <Bot className="w-5 h-5" />
+                </div>
+            )}
+            <div className={`flex-1 space-y-3 max-w-[80%] ${message.role === 'user' ? 'order-2' : 'order-1'}`}>
+              <Card className={`border-0 shadow-sm rounded-2xl ${
+                message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-card'
               }`}>
-                {message.role === 'user' ? (
-                  <User className="w-4 h-4 text-white" />
-                ) : (
-                  <Bot className="w-4 h-4 text-white" />
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 space-y-3">
-              <Card className="border-0 shadow-sm">
                 <CardContent className="p-4">
-                  <div className="prose prose-sm max-w-none">
-                    {message.content.split('\n').map((line, index) => (
-                      <p key={index} className="mb-2 last:mb-0">
-                        {line}
-                      </p>
-                    ))}
-                  </div>
+                   <MarkdownRenderer content={message.content} />
                 </CardContent>
               </Card>
 
-              {/* Sources */}
-              {message.sources && message.sources.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-gray-600 flex items-center gap-2">
-                    <Search className="w-4 h-4" />
-                    Sources
-                  </h4>
-                  <div className="grid gap-2">
-                    {message.sources.map((source, index) => (
-                      <Card key={index} className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                        <CardContent className="p-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <h5 className="font-medium text-sm truncate mb-1">
-                                {source.title}
-                              </h5>
-                              <p className="text-xs text-gray-600 mb-2 line-clamp-2">
-                                {source.snippet}
-                              </p>
-                              <a 
-                                href={source.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                              >
-                                {new URL(source.url).hostname}
-                                <ExternalLink className="w-3 h-3" />
-                              </a>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
-                </div>
+              {message.role === 'assistant' && sourcesForMessages[message.id] && sourcesForMessages[message.id].length > 0 && (
+                <SourceCitation sources={sourcesForMessages[message.id]} />
               )}
             </div>
+             {message.role === 'user' && (
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-secondary text-secondary-foreground flex-shrink-0">
+                    <User className="w-5 h-5" />
+                </div>
+            )}
           </div>
         ))}
 
-        {isLoading && (
-          <div className="flex gap-4">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
-                <Bot className="w-4 h-4 text-white" />
-              </div>
-            </div>
-            <Card className="flex-1 border-0 shadow-sm">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-gray-600">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Searching and thinking...
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        {isLoading && messages[messages.length - 1]?.role === 'user' && (
+           <div className="flex gap-4 justify-start">
+             <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary/10 text-primary flex-shrink-0">
+                 <Bot className="w-5 h-5" />
+             </div>
+             <div className="flex-1 space-y-3">
+               <Card className="border-0 shadow-sm bg-card rounded-2xl">
+                 <CardContent className="p-4 flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                    <span className="text-muted-foreground text-sm">
+                      {namespace ? 'Searching knowledge base and web...' : 'Searching web...'}
+                    </span>
+                 </CardContent>
+               </Card>
+             </div>
+           </div>
         )}
-
+        
+        {error && (
+            <div className="flex justify-center">
+                <Card className="bg-destructive/10 border-destructive text-destructive-foreground">
+                    <CardContent className="p-4 flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5" />
+                        <div>
+                          <p className="font-medium">Something went wrong</p>
+                          <p className="text-sm opacity-80">{error.message}</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="border-t bg-white p-4">
-        <div className="flex gap-2">
+      <div className="p-4 bg-card/80 backdrop-blur-sm border-t">
+        <form onSubmit={handleSubmit} className="flex gap-2">
           <Input
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Ask anything..."
-            className="flex-1 min-h-[48px] text-base"
+            onChange={handleInputChange}
+            placeholder={namespace 
+              ? "Ask about your content or anything else..." 
+              : "Ask me anything..."
+            }
+            className="flex-1"
             disabled={isLoading}
           />
-          <Button 
-            onClick={() => handleSend()}
-            disabled={!input.trim() || isLoading}
-            size="lg"
-            className="px-6"
-          >
+          <Button type="submit" disabled={isLoading || !input.trim()} variant="default">
             {isLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Send className="w-4 h-4" />
             )}
           </Button>
-        </div>
+        </form>
       </div>
     </div>
   )

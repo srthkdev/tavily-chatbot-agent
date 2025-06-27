@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       clientConfig.appwrite.collections.chatbots,
       [
         Query.equal('userId', user.$id),
-        Query.orderDesc('createdAt'),
+        Query.orderDesc('$createdAt'),
         Query.limit(50)
       ]
     )

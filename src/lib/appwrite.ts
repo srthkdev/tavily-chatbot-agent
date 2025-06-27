@@ -1,13 +1,23 @@
 import { Client, Account, Databases, Storage, Query, ID } from 'appwrite'
+import { Client as NodeClient } from 'node-appwrite'
 import { clientConfig } from '@/config/tavily.config'
 
-// Initialize Appwrite client
+// Initialize Appwrite client for client-side operations
 export const client = new Client()
 
 if (clientConfig.appwrite.endpoint && clientConfig.appwrite.projectId) {
   client
     .setEndpoint(clientConfig.appwrite.endpoint)
     .setProject(clientConfig.appwrite.projectId)
+}
+
+// Function to get a server-side Appwrite client with API key
+export const getAppwriteClient = () => {
+    const appwriteClient = new NodeClient()
+        .setEndpoint(clientConfig.appwrite.endpoint)
+        .setProject(clientConfig.appwrite.projectId)
+        .setKey(process.env.APPWRITE_API_KEY!)
+    return appwriteClient
 }
 
 export const account = new Account(client)
