@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
           existingClient
             .setEndpoint(clientConfig.appwrite.endpoint)
             .setProject(clientConfig.appwrite.projectId)
-            .setSession(session.secret || session.$id)
+            .setSession(session.secret)
           
           const existingAccount = new Account(existingClient)
           user = await existingAccount.get()
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     userClient
       .setEndpoint(clientConfig.appwrite.endpoint)
       .setProject(clientConfig.appwrite.projectId)
-      .setSession(session.secret || session.$id)
+      .setSession(session.secret)
 
     const databases = new Databases(userClient)
     
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
 
     // Set session cookie - use secret for server-side operations
     const cookieStore = await cookies()
-    cookieStore.set('appwrite-session', session.secret || session.$id, {
+    cookieStore.set('appwrite-session', session.secret, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',

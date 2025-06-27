@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Client, Account, Databases, Query } from 'node-appwrite'
-import { clientConfig } from '@/config/tavily.config'
+import { createSessionClient } from '@/lib/appwrite'
+import { Query } from 'node-appwrite'
 import { cookies } from 'next/headers'
+import { clientConfig } from '@/config/tavily.config'
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,17 +17,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Create client with session (using node-appwrite for server-side)
-    const client = new Client()
-    client
-      .setEndpoint(clientConfig.appwrite.endpoint)
-      .setProject(clientConfig.appwrite.projectId)
-
-    // For user operations, use session-only (not API key)
-    client.setSession(sessionCookie.value)
-
-    const account = new Account(client)
-    const databases = new Databases(client)
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
 
     // Get current user
     let user
@@ -46,7 +38,7 @@ export async function GET(request: NextRequest) {
       clientConfig.appwrite.collections.chatbots,
       [
         Query.equal('userId', user.$id),
-        Query.orderDesc('$createdAt'),
+        Query.orderDesc('createdAt'),
         Query.limit(50)
       ]
     )

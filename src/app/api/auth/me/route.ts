@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Client, Account, Databases, Query } from 'node-appwrite'
-import { clientConfig } from '@/config/tavily.config'
+import { createSessionClient } from '@/lib/appwrite'
 import { cookies } from 'next/headers'
+import { clientConfig } from '@/config/tavily.config'
+import { Query } from 'node-appwrite'
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,33 +17,28 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Use node-appwrite for server-side operations
-    const client = new Client()
-    client
-      .setEndpoint(clientConfig.appwrite.endpoint)
-      .setProject(clientConfig.appwrite.projectId)
-
-    // For user account operations, use ONLY session (not API key)
-    // API key gives application role which doesn't have account scope
-    client.setSession(sessionCookie.value)
-
-    const account = new Account(client)
-    const databases = new Databases(client)
+    // Create session client with the cookie token
+    const { account, databases } = createSessionClient(sessionCookie.value)
 
     // Get current user from Appwrite
     const user = await account.get()
     
-    // Get user profile from database by document ID (same as user ID)
-    const profile = await databases.getDocument(
+    // Retrieve user profile stored in the users collection. We store documents
+    // with a random ID and keep a reference to the Appwrite account in the
+    // `accountId` field, so we need to query for it instead of assuming the
+    // document ID matches the user ID.
+    const profiles = await databases.listDocuments(
       clientConfig.appwrite.databaseId,
       clientConfig.appwrite.collections.users,
-      user.$id
+      [Query.equal('accountId', user.$id), Query.limit(1)]
     )
+
+    const profile = profiles.documents[0]
     
     // Parse preferences JSON string to object
     let preferences = {}
     try {
-      preferences = profile.preferences ? JSON.parse(profile.preferences) : {}
+      preferences = profile && profile.preferences ? JSON.parse(profile.preferences) : {}
     } catch (e) {
       console.warn('Failed to parse user preferences:', e)
       preferences = {}

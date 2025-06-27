@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { signIn } from '@/lib/appwrite'
 import { cookies } from 'next/headers'
 
 export async function POST(request: NextRequest) {
@@ -13,12 +12,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Sign in the user
-    const session = await signIn(email, password)
+    // Sign in using server SDK so we get the session secret
+    const { Client: NodeClient, Account: NodeAccount } = await import('node-appwrite')
+
+    const nodeClient = new NodeClient()
+      .setEndpoint(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
+      .setProject(process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID!)
+
+    if (!process.env.APPWRITE_API_KEY) {
+      return NextResponse.json(
+        { error: 'Server mis-configuration: missing APPWRITE_API_KEY' },
+        { status: 500 }
+      )
+    }
+
+    nodeClient.setKey(process.env.APPWRITE_API_KEY)
+
+    const nodeAccount = new NodeAccount(nodeClient)
+
+    const session = await nodeAccount.createEmailPasswordSession(email, password)
 
     // Set session cookie - use secret for server-side operations
     const cookieStore = await cookies()
-    const sessionToken = session.secret || session.$id
+    // For SSR, Appwrite expects the raw session secret as the value that will be
+    // provided later to client.setSession(secret). The official docs explicitly
+    // mention to "Use the secret property of the session object as the cookie
+    // value". Pre-pending the userId is **not** required and causes the SDK to
+    // treat the token as invalid, resulting in 401 responses.
+    const sessionToken = session.secret
     
     cookieStore.set('appwrite-session', sessionToken, {
       httpOnly: true,

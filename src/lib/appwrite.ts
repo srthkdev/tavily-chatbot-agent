@@ -1,5 +1,5 @@
 import { Client, Account, Databases, Storage, Query, ID } from 'appwrite'
-import { Client as NodeClient } from 'node-appwrite'
+import { Client as NodeClient, Account as NodeAccount, Databases as NodeDatabases } from 'node-appwrite'
 import { clientConfig } from '@/config/tavily.config'
 
 // Initialize Appwrite client for client-side operations
@@ -420,4 +420,44 @@ export function subscribeToUserChatbots(
 // Check if Appwrite is available
 export function isAppwriteAvailable(): boolean {
   return clientConfig.features.enableAppwrite
+}
+
+// Server-side session client - creates a new client for each request
+export function createSessionClient(sessionToken: string) {
+  const client = new NodeClient()
+    .setEndpoint(clientConfig.appwrite.endpoint)
+    .setProject(clientConfig.appwrite.projectId)
+    .setSession(sessionToken)
+
+  return {
+    get account() {
+      return new NodeAccount(client)
+    },
+    get databases() {
+      return new NodeDatabases(client)
+    },
+    client
+  }
+}
+
+// Admin client - for operations that require API key
+export function createAdminClient() {
+  const client = new NodeClient()
+    .setEndpoint(clientConfig.appwrite.endpoint)
+    .setProject(clientConfig.appwrite.projectId)
+
+  // Only set API key if available
+  if (process.env.APPWRITE_API_KEY) {
+    client.setKey(process.env.APPWRITE_API_KEY)
+  }
+
+  return {
+    get account() {
+      return new NodeAccount(client)
+    },
+    get databases() {
+      return new NodeDatabases(client)
+    },
+    client
+  }
 } 
