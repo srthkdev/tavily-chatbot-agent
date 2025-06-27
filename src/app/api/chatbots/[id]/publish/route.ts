@@ -1,19 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Databases } from 'node-appwrite'
+import { Client, Account, Databases } from 'node-appwrite'
 import { clientConfig } from '@/config/tavily.config'
-import { getAppwriteClient } from '@/lib/appwrite'
+import { cookies } from 'next/headers'
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const chatbotId = params.id
+        
+        // Check authentication
+        const cookieStore = await cookies()
+        const sessionCookie = cookieStore.get('appwrite-session')
+        
+        if (!sessionCookie) {
+            return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+        }
+
+        // Create client with session
+        const client = new Client()
+        client
+            .setEndpoint(clientConfig.appwrite.endpoint)
+            .setProject(clientConfig.appwrite.projectId)
+            .setSession(sessionCookie.value)
+
+        const account = new Account(client)
+        const databases = new Databases(client)
+
+        // Get current user
+        let user
+        try {
+            user = await account.get()
+        } catch (error) {
+            cookieStore.delete('appwrite-session')
+            return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+        }
+
+        // Verify chatbot ownership
+        const chatbot = await databases.getDocument(
+            clientConfig.appwrite.databaseId,
+            clientConfig.appwrite.collections.chatbots,
+            chatbotId
+        )
+        
+        if (chatbot.userId !== user.$id) {
+            return NextResponse.json({ error: 'Access denied' }, { status: 403 })
+        }
+        
         const { published } = await request.json()
 
         if (typeof published !== 'boolean') {
             return NextResponse.json({ error: 'Published status is required' }, { status: 400 })
         }
-
-        const client = getAppwriteClient()
-        const databases = new Databases(client)
 
         const publicUrl = published ? `/p/${chatbotId}` : ''
 

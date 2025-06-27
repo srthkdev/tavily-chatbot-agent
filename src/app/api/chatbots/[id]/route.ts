@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentUser, getChatbot, updateChatbot, deleteChatbot } from '@/lib/appwrite'
+import { getChatbot, updateChatbot, deleteChatbot } from '@/lib/appwrite'
 import { cookies } from 'next/headers'
 import { Client, Account, Databases, Query } from 'node-appwrite'
 import { clientConfig } from '@/config/tavily.config'
@@ -22,10 +22,20 @@ export async function GET(
       )
     }
 
+    // Create client with session
+    const client = new Client()
+    client
+      .setEndpoint(clientConfig.appwrite.endpoint)
+      .setProject(clientConfig.appwrite.projectId)
+      .setSession(sessionCookie.value)
+
+    const account = new Account(client)
+
     // Get current user
-    const user = await getCurrentUser()
-    
-    if (!user) {
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
       cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },
@@ -77,10 +87,20 @@ export async function PUT(
       )
     }
 
+    // Create client with session
+    const client = new Client()
+    client
+      .setEndpoint(clientConfig.appwrite.endpoint)
+      .setProject(clientConfig.appwrite.projectId)
+      .setSession(sessionCookie.value)
+
+    const account = new Account(client)
+
     // Get current user
-    const user = await getCurrentUser()
-    
-    if (!user) {
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
       cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },

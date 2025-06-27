@@ -32,21 +32,12 @@ export async function GET(request: NextRequest) {
     // Get current user from Appwrite
     const user = await account.get()
     
-    // Get user profile from database by accountId
-    const profileQuery = await databases.listDocuments(
+    // Get user profile from database by document ID (same as user ID)
+    const profile = await databases.getDocument(
       clientConfig.appwrite.databaseId,
       clientConfig.appwrite.collections.users,
-      [Query.equal('accountId', user.$id)]
+      user.$id
     )
-    
-    if (profileQuery.documents.length === 0) {
-      return NextResponse.json(
-        { error: 'User profile not found' },
-        { status: 404 }
-      )
-    }
-    
-    const profile = profileQuery.documents[0]
     
     // Parse preferences JSON string to object
     let preferences = {}

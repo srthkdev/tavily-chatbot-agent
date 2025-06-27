@@ -57,7 +57,8 @@ export async function addMemories(
     })
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      console.warn(`Mem0 add memories failed with status: ${response.status}`)
+      return { success: false, memories: [] }
     }
     
     const result = await response.json()
@@ -68,7 +69,7 @@ export async function addMemories(
     }
   } catch (error) {
     console.error('Mem0 add memories error:', error)
-    throw new Error('Failed to add memories')
+    return { success: false, memories: [] }
   }
 }
 
@@ -155,13 +156,14 @@ export async function deleteMemory(
     })
     
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      console.warn(`Mem0 delete memory failed with status: ${response.status}`)
+      return { success: false }
     }
     
     return { success: true }
   } catch (error) {
     console.error('Mem0 delete memory error:', error)
-    throw new Error('Failed to delete memory')
+    return { success: false }
   }
 }
 

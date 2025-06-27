@@ -48,6 +48,8 @@ export interface Chatbot {
   favicon?: string
   status: 'active' | 'inactive' | 'processing'
   pagesCrawled: string
+  published?: boolean
+  publicUrl?: string
   createdAt: string
   updatedAt: string
 }
