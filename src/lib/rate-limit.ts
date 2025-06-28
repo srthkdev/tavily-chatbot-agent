@@ -5,6 +5,7 @@ import { Redis } from '@upstash/redis'
 let createRateLimit: Ratelimit | null = null
 let queryRateLimit: Ratelimit | null = null
 let searchRateLimit: Ratelimit | null = null
+let researchRateLimit: Ratelimit | null = null
 
 // Initialize rate limiters if Redis is available
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
@@ -41,6 +42,13 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
         analytics: true,
         prefix: 'tavily-chatbot:ratelimit:search',
       })
+
+      researchRateLimit = new Ratelimit({
+        redis,
+        limiter: Ratelimit.fixedWindow(10, '1 d'),
+        analytics: true,
+        prefix: 'tavily-chatbot:ratelimit:research',
+      })
       
       console.log('✅ Rate limiting initialized successfully')
     }
@@ -51,7 +59,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
 }
 
 export async function checkRateLimit(
-  type: 'create' | 'query' | 'search',
+  type: 'create' | 'query' | 'search' | 'research',
   identifier: string
 ): Promise<{ success: boolean; limit?: number; remaining?: number; reset?: number }> {
   try {
@@ -66,6 +74,9 @@ export async function checkRateLimit(
         break
       case 'search':
         rateLimit = searchRateLimit
+        break
+      case 'research':
+        rateLimit = researchRateLimit
         break
     }
 
@@ -89,4 +100,4 @@ export async function checkRateLimit(
   }
 }
 
-export { createRateLimit, queryRateLimit, searchRateLimit } 
+export { createRateLimit, queryRateLimit, searchRateLimit, researchRateLimit } 

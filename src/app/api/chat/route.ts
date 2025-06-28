@@ -6,6 +6,7 @@ import { serverConfig } from '@/config/tavily.config'
 import { Client, Account } from 'node-appwrite'
 import { cookies } from 'next/headers'
 import { processQuery } from '@/lib/langgraph-agent'
+import { handleCompanyChatQuery } from '@/lib/company-research-agent'
 
 // Helper to get user ID from session
 async function getUserId() {
@@ -67,14 +68,51 @@ export async function POST(request: NextRequest) {
             }
         })
 
-        // Process query using the LangGraph agent to get the response
-        const result = await processQuery({
-            messages: langchainMessages,
-            query: lastMessage.content,
-            userId: userId || undefined,
-            chatbotId: chatbotId || undefined,
-            namespace: namespace || undefined,
-        })
+        // Check if this is a company chatbot by fetching chatbot data
+        let isCompanyBot = false
+        let companyData = null
+        
+        if (chatbotId) {
+            try {
+                const chatbotResponse = await fetch(`${request.url.split('/api')[0]}/api/chatbots/${chatbotId}`, {
+                    headers: {
+                        'Cookie': request.headers.get('Cookie') || ''
+                    }
+                })
+                
+                if (chatbotResponse.ok) {
+                    const chatbotResult = await chatbotResponse.json()
+                    if (chatbotResult.success && chatbotResult.data?.type === 'company') {
+                        isCompanyBot = true
+                        companyData = chatbotResult.data.companyData
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to fetch chatbot data:', error)
+            }
+        }
+
+        let result
+        
+        if (isCompanyBot && companyData) {
+            // Use company research agent for company chatbots
+            result = await handleCompanyChatQuery({
+                company: companyData.name,
+                companyUrl: companyData.url,
+                messages: langchainMessages,
+                userId: userId || undefined,
+                chatbotId: chatbotId || undefined,
+            })
+        } else {
+            // Use regular agent for standard chatbots
+            result = await processQuery({
+                messages: langchainMessages,
+                query: lastMessage.content,
+                userId: userId || undefined,
+                chatbotId: chatbotId || undefined,
+                namespace: namespace || undefined,
+            })
+        }
 
         // Check if AI model is available
         if (!serverConfig.ai.model) {
@@ -104,7 +142,7 @@ export async function POST(request: NextRequest) {
             headers: {
                 'x-sources': sourcesBase64,
                 'x-sources-encoding': 'base64',
-                'x-company-specific': result.isCompanySpecific.toString(),
+                'x-company-specific': (isCompanyBot || ('isCompanySpecific' in result ? result.isCompanySpecific : false)).toString(),
             }
         })
 

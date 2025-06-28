@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/app-sidebar"
 import { ArrowLeft, Globe, Database, Upload, FileText, Share2, Loader2, AlertCircle, Building, BarChart3, Plus, File, Type } from "lucide-react"
 
 interface Chatbot {
@@ -213,73 +215,82 @@ export default function ChatbotAdminPage() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-screen">
-                <div className="text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
-                    <p className="text-muted-foreground">Loading chatbot admin panel...</p>
-                </div>
-            </div>
+            <SidebarProvider>
+                <AppSidebar />
+                <SidebarInset>
+                    <div className="flex items-center justify-center h-screen">
+                        <div className="text-center">
+                            <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+                            <p className="text-muted-foreground">Loading chatbot admin panel...</p>
+                        </div>
+                    </div>
+                </SidebarInset>
+            </SidebarProvider>
         )
     }
 
     if (error) {
         return (
-            <div className="flex flex-col items-center justify-center h-screen">
-                <AlertCircle className="w-12 h-12 text-destructive mb-4" />
-                <h2 className="text-xl font-semibold mb-2">Error</h2>
-                <p className="text-muted-foreground mb-4">{error}</p>
-                {error === 'Chatbot not found' && (
-                    <p className="text-sm text-muted-foreground mb-4">
-                        Redirecting to dashboard in 3 seconds...
-                    </p>
-                )}
-                <Link href="/dashboard">
-                    <Button variant="outline">
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        Back to Dashboard
-                    </Button>
-                </Link>
-            </div>
+            <SidebarProvider>
+                <AppSidebar />
+                <SidebarInset>
+                    <div className="flex flex-col items-center justify-center h-screen">
+                        <AlertCircle className="w-12 h-12 text-destructive mb-4" />
+                        <h2 className="text-xl font-semibold mb-2">Error</h2>
+                        <p className="text-muted-foreground mb-4">{error}</p>
+                        {error === 'Chatbot not found' && (
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Redirecting to dashboard in 3 seconds...
+                            </p>
+                        )}
+                        <Link href="/dashboard">
+                            <Button variant="outline">
+                                <ArrowLeft className="w-4 h-4 mr-2" />
+                                Back to Dashboard
+                            </Button>
+                        </Link>
+                    </div>
+                </SidebarInset>
+            </SidebarProvider>
         )
     }
 
     return (
-        <div className="min-h-screen bg-background">
-            <header className="bg-card border-b p-3">
-                <div className="flex items-center gap-2 max-w-7xl mx-auto">
-                    <Button variant="ghost" size="icon" asChild>
-                        <Link href="/dashboard">
-                            <ArrowLeft className="w-5 h-5 text-muted-foreground" />
-                        </Link>
-                    </Button>
-                    <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                            <Building className="w-4 h-4 text-primary" />
+        <SidebarProvider>
+            <AppSidebar />
+            <SidebarInset>
+                <div className="min-h-screen bg-background">
+                    <header className="bg-card border-b p-3">
+                        <div className="flex items-center gap-2 px-4">
+                            <SidebarTrigger className="mr-2" />
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                                    <Building className="w-4 h-4 text-primary" />
+                                </div>
+                                <div>
+                                    <h1 className="text-lg font-semibold text-foreground">{chatbot?.title}</h1>
+                                    <p className="text-sm text-muted-foreground">{chatbot?.domain}</p>
+                                </div>
+                            </div>
+                            <div className="ml-auto flex items-center gap-2">
+                                {chatbot?.published && publicUrl && (
+                                    <Button variant="outline" size="sm" asChild>
+                                        <a href={publicUrl} target="_blank" rel="noopener noreferrer">
+                                            <Share2 className="w-4 h-4 mr-2" />
+                                            View Public
+                                        </a>
+                                    </Button>
+                                )}
+                                <Link href={`/chat?chatbotId=${chatbot?.namespace}`}>
+                                    <Button size="sm">
+                                        Test Chat
+                                    </Button>
+                                </Link>
+                            </div>
                         </div>
-                        <div>
-                            <h1 className="text-lg font-semibold text-foreground">{chatbot?.title}</h1>
-                            <p className="text-sm text-muted-foreground">{chatbot?.domain}</p>
-                        </div>
-                    </div>
-                    <div className="ml-auto flex items-center gap-2">
-                        {chatbot?.published && publicUrl && (
-                            <Button variant="outline" size="sm" asChild>
-                                <a href={publicUrl} target="_blank" rel="noopener noreferrer">
-                                    <Share2 className="w-4 h-4 mr-2" />
-                                    View Public
-                                </a>
-                            </Button>
-                        )}
-                        <Link href={`/chat?chatbotId=${chatbot?.namespace}`}>
-                            <Button size="sm">
-                                Test Chat
-                            </Button>
-                        </Link>
-                    </div>
-                </div>
-            </header>
+                    </header>
 
-            <main className="max-w-7xl mx-auto py-8 px-4">
+            <main className="py-8 px-6">
                 <Tabs defaultValue="overview" className="space-y-6">
                     <TabsList className="grid w-full grid-cols-4">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -648,6 +659,8 @@ export default function ChatbotAdminPage() {
                     </TabsContent>
                 </Tabs>
             </main>
-        </div>
+                </div>
+            </SidebarInset>
+        </SidebarProvider>
     )
 } 

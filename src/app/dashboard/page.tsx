@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
+import { AppSidebar } from "@/components/app-sidebar"
 
 import { clientConfig as config } from "@/config/tavily.config"
 import { useAuth } from "@/contexts/auth-context"
@@ -24,7 +26,7 @@ import {
   Settings,
   Copy,
   Check,
-
+  Building2,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -140,10 +142,10 @@ export default function DashboardPage() {
 
   if (authLoading || chatbotsLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-orange-500 mx-auto mb-4" />
-          <p className="text-gray-600">Loading your chatbots...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto mb-4" />
+          <p className="text-gray-600">Loading your projects...</p>
         </div>
       </div>
     )
@@ -154,52 +156,48 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-red-50">
-      {/* Header */}
-      <div className="border-b border-orange-100 bg-white/50 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <Link href="/">
-                <Button variant="ghost" size="sm" className="text-gray-600 hover:text-gray-900">
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back
-                </Button>
-              </Link>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">My Chatbots</h1>
-                              <p className="text-sm text-gray-500">
-                {allChatbots.length} chatbot{allChatbots.length !== 1 ? 's' : ''} created
-              </p>
+    <SidebarProvider>
+      <AppSidebar />
+      <SidebarInset>
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+          {/* Header */}
+          <div className="border-b border-blue-100 bg-white/50 backdrop-blur-sm">
+            <div className="flex items-center px-4 py-4">
+              <SidebarTrigger className="mr-4" />
+              <div className="flex justify-between items-center w-full">
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">My Projects</h1>
+                  <p className="text-sm text-gray-500">
+                    {allChatbots.length} project{allChatbots.length !== 1 ? 's' : ''} created
+                  </p>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <Link href="/">
+                    <Button className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Project
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
-            
-            <div className="flex items-center space-x-3">
-              <Link href="/">
-                <Button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create New
-                </Button>
-              </Link>
-            </div>
           </div>
-        </div>
-      </div>
 
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="px-6 py-8">
         {/* Search and Controls */}
         <div className="mb-8">
-          <div className="flex items-center space-x-4 mb-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input
-                placeholder="Search chatbots..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
+                      <div className="flex items-center space-x-4 mb-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Input
+                  placeholder="Search projects..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
             <Button
               variant="outline"
               onClick={async () => {
@@ -210,12 +208,12 @@ export default function DashboardPage() {
                     const result = await response.json()
                     if (result.success) {
                       setChatbots(result.data)
-                      toast.success('Chatbots refreshed')
+                                              toast.success('Projects refreshed')
                     }
                   }
                 } catch (error) {
                   console.error('Failed to refresh chatbots:', error)
-                  toast.error('Failed to refresh chatbots')
+                  toast.error('Failed to refresh projects')
                 } finally {
                   setChatbotsLoading(false)
                 }
@@ -248,9 +246,9 @@ export default function DashboardPage() {
             </p>
             {allChatbots.length === 0 && (
               <Link href="/">
-                <Button className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white">
+                <Button className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white">
                   <Plus className="w-4 h-4 mr-2" />
-                  Create Your First Chatbot
+                  Create Your First Project
                 </Button>
               </Link>
             )}
@@ -260,7 +258,7 @@ export default function DashboardPage() {
             {filteredIndexes.map((chatbot) => (
               <Card 
                 key={chatbot.$id} 
-                className="group hover:shadow-lg transition-all duration-200 border-orange-100 hover:border-orange-200 bg-white/80 backdrop-blur-sm"
+                className="group hover:shadow-lg transition-all duration-200 border-blue-100 hover:border-blue-200 bg-white/80 backdrop-blur-sm"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
@@ -332,34 +330,19 @@ export default function DashboardPage() {
                           variant="outline" 
                           size="sm" 
                           className="flex-1"
-                          onClick={() => router.push(`/chat?namespace=${chatbot.namespace}&name=${encodeURIComponent(chatbot.name || '')}`)}
+                          onClick={() => router.push(`/project/${chatbot.$id}`)}
                         >
-                          <MessageSquare className="w-4 h-4 mr-2" />
-                          Chat
+                          <Building2 className="w-4 h-4 mr-2" />
+                          Open Project
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="sm"
                           className="flex-1"
-                          onClick={() => {
-                            // Check if chatbot exists before navigating
-                            fetch(`/api/chatbots/${chatbot.$id}`)
-                              .then(response => {
-                                if (response.ok) {
-                                  router.push(`/admin/${chatbot.$id}`)
-                                } else {
-                                  toast.error('Chatbot not found')
-                                  // Refresh the list
-                                  window.location.reload()
-                                }
-                              })
-                              .catch(() => {
-                                toast.error('Error accessing chatbot')
-                              })
-                          }}
+                          onClick={() => router.push(`/project/${chatbot.$id}?tab=chat`)}
                         >
-                          <Settings className="w-4 h-4 mr-2" />
-                          Manage
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          Chat
                         </Button>
                       </div>
                       
@@ -420,6 +403,8 @@ export default function DashboardPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   )
 } 

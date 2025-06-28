@@ -123,7 +123,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
     }
     
-    const { url, maxResults = config.tavily.defaultLimit, searchDepth = config.tavily.searchDepth } = body
+    const { 
+      url, 
+      maxResults = config.tavily.defaultLimit, 
+      searchDepth = config.tavily.searchDepth,
+      name,
+      description,
+      type,
+      companyData
+    } = body
     
     if (!url) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 })
@@ -215,22 +223,25 @@ export async function POST(request: NextRequest) {
       id: namespace,
       namespace,
       url,
-      title: companyMetadata.name,
-      description: companyMetadata.description,
+      title: name || companyMetadata.name,
+      description: description || companyMetadata.description,
+      type: type || 'standard',
       companyInfo: {
         name: companyMetadata.name,
         domain: companyMetadata.domain,
         industry: companyMetadata.industry,
         keywords: companyMetadata.keywords,
       },
+      // Include company research data if provided
+      companyData: companyData || null,
       pagesCrawled: chatbotData.pagesCrawled,
       documentsStored: documents.length,
       createdAt: new Date().toISOString(),
       createdBy: user.$id,
       metadata: {
-        title: companyMetadata.name,
-        description: companyMetadata.description,
-        isCompanySpecific: true,
+        title: name || companyMetadata.name,
+        description: description || companyMetadata.description,
+        isCompanySpecific: type === 'company',
         searchDepth,
         maxResults,
       },
@@ -254,28 +265,30 @@ export async function POST(request: NextRequest) {
           // Required fields according to schema
           userId: user.$id,
           namespace,
-          name: companyMetadata.name,
+          name: name || companyMetadata.name,
           status: 'active',
           pagesCrawled: chatbotData.pagesCrawled.toString(),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           
           // Optional fields
-          description: companyMetadata.description || '',
+          description: description || companyMetadata.description || '',
           url: url || '',
           favicon: null,
           
           // Additional fields for functionality (not in schema but used by app)
-          title: companyMetadata.name,
-          companyName: companyMetadata.name,
+          title: name || companyMetadata.name,
+          type: type || 'standard',
+          companyName: companyData?.name || companyMetadata.name,
           domain: companyMetadata.domain,
-          industry: companyMetadata.industry,
+          industry: companyData?.industry || companyMetadata.industry,
           documentsStored: documents.length,
           createdBy: user.$id,
           isActive: true,
           published: false,
           publicUrl: null,
           metadata: JSON.stringify(enhancedChatbotData.metadata),
+          companyData: companyData ? JSON.stringify(companyData) : null,
         }
       )
       console.log('Successfully saved chatbot to Appwrite database')
