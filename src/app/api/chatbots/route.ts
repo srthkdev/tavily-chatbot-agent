@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createSessionClient } from '@/lib/appwrite'
 import { Query } from 'node-appwrite'
 import { cookies } from 'next/headers'
 import { clientConfig } from '@/config/tavily.config'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Check authentication
     const cookieStore = await cookies()
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     let user
     try {
       user = await account.get()
-    } catch (error) {
+    } catch {
       cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },

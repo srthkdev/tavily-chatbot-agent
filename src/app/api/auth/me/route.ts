@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createSessionClient } from '@/lib/appwrite'
 import { cookies } from 'next/headers'
 import { clientConfig } from '@/config/tavily.config'
 import { Query } from 'node-appwrite'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Check if user has a session cookie
     const cookieStore = await cookies()

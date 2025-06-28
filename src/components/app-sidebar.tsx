@@ -1,11 +1,13 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
   Building2,
   Home,
   Plus,
   Settings,
+  type LucideIcon,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -22,7 +24,12 @@ import {
 } from "@/components/ui/sidebar"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [projects, setProjects] = React.useState<any[]>([])
+  const [projects, setProjects] = React.useState<Array<{
+    id: string;
+    name: string;
+    url: string;
+    icon: LucideIcon;
+  }>>([])
   const [loading, setLoading] = React.useState(true)
   const { isAuthenticated } = useAuth()
 
@@ -38,7 +45,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           const result = await response.json()
           if (result.success) {
             // Transform projects to match expected format
-            const transformedProjects = result.data.map((project: any) => ({
+            const transformedProjects = result.data.map((project: { $id: string; name: string }) => ({
               id: project.$id,
               name: project.name,
               url: `/project/${project.$id}`,
@@ -67,7 +74,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild>
-                <a href="/" className="flex items-center gap-3">
+                <Link href="/" className="flex items-center gap-3">
                   <div className="bg-gradient-to-br from-blue-500 to-purple-500 text-white flex aspect-square size-8 items-center justify-center rounded-lg">
                     <Building2 className="size-4" />
                   </div>
@@ -75,7 +82,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <span className="truncate font-medium">Walnut AI</span>
                     <span className="truncate text-xs text-muted-foreground">Business Intelligence</span>
                   </div>
-                </a>
+                </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -87,26 +94,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <a href="/dashboard" className="flex items-center gap-2">
+                  <Link href="/dashboard" className="flex items-center gap-2">
                     <Home className="size-4" />
                     <span>Dashboard</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <a href="/" className="flex items-center gap-2">
+                  <Link href="/" className="flex items-center gap-2">
                     <Plus className="size-4" />
                     <span>Create Project</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <a href="/settings" className="flex items-center gap-2">
+                  <Link href="/settings" className="flex items-center gap-2">
                     <Settings className="size-4" />
                     <span>Settings</span>
-                  </a>
+                  </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

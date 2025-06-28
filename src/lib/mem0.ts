@@ -81,6 +81,7 @@ export async function searchMemories(
     })
     
     // Transform the result to match our interface
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (result || []).map((item: any) => ({
       id: item.id,
       memory: item.memory || item.text || '',
@@ -113,6 +114,7 @@ export async function getUserMemories(
     })
     
     // Transform the result to match our interface
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (result || []).map((item: any) => ({
       id: item.id,
       memory: item.memory || item.text || '',

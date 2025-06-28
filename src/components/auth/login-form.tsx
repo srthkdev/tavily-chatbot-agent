@@ -108,7 +108,7 @@ export function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormProps) {
                 className="text-sm text-muted-foreground hover:text-foreground"
                 disabled={isLoading}
               >
-                Don't have an account? Sign up
+                Don&apos;t have an account? Sign up
               </button>
             </div>
           )}

@@ -29,7 +29,7 @@ import { toast } from "sonner"
 
 export default function HomePage() {
   const router = useRouter()
-  const { isAuthenticated, isLoading: authLoading } = useAuth()
+  const { isAuthenticated } = useAuth()
   
   const [formData, setFormData] = useState({
     company: '',

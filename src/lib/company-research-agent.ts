@@ -2,7 +2,7 @@ import { BaseMessage, HumanMessage, AIMessage, SystemMessage } from '@langchain/
 import { ChatOpenAI } from '@langchain/openai'
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import { searchWeb, TavilySearchResult } from './tavily'
-import { searchMemories, addConversationTurn, getMemoryContext } from './mem0'
+import { addConversationTurn, getMemoryContext } from './mem0'
 import { searchDocuments } from './upstash-search'
 import { serverConfig } from '@/config/tavily.config'
 
@@ -17,16 +17,25 @@ interface CompanyResearchState {
   namespace?: string
   
   // Research data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   siteData?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   financialData?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   newsData?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   industryData?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   companyData?: any
   
   // Processed data
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   curatedFinancialData?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   curatedNewsData?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   curatedIndustryData?: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   curatedCompanyData?: any
   
   // Briefings
@@ -36,15 +45,18 @@ interface CompanyResearchState {
   companyBriefing?: string
   
   // Final outputs
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   briefings?: any
   report?: string
   references?: string[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sources?: any[]
   
   // Chat state
   messages: BaseMessage[]
   memoryContext?: string
   searchResults?: TavilySearchResult[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ragResults?: any[]
   isCompanyChat: boolean
   
@@ -75,7 +87,7 @@ function getAIModel() {
   if (openaiKey) {
     return new ChatOpenAI({
       apiKey: openaiKey,
-      model: 'gpt-4o-mini',
+      model: 'gpt-4.1',
       temperature: serverConfig.ai.temperature,
       maxTokens: serverConfig.ai.maxTokens,
     })
@@ -151,7 +163,7 @@ export class CompanyResearchAgent {
 
   // Step 2: Financial Analysis
   async financialAnalysisStep(state: CompanyResearchState): Promise<CompanyResearchState> {
-    const { company, siteData } = state
+    const { company } = state
     
     try {
       const financialQuery = `${company} financial data revenue funding valuation earnings stock price`
@@ -379,7 +391,8 @@ Make it professional, well-structured, and actionable.
             maxResults: 3,
             searchDepth: 'advanced',
             includeRawContent: true,
-          }).catch(e => ({ results: [] }))
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          }).catch((_e) => ({ results: [] }))
         )
       }
 
@@ -389,10 +402,12 @@ Make it professional, well-structured, and actionable.
           query: `${userQuery} ${company}`,
           maxResults: 4,
           searchDepth: 'advanced',
-        }).catch(e => ({ results: [] }))
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        }).catch((_e) => ({ results: [] }))
       )
 
       // 3. RAG search if namespace available
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let ragResults: any[] = []
       if (state.namespace) {
         try {
@@ -420,7 +435,7 @@ Make it professional, well-structured, and actionable.
       }
 
       // Prepare comprehensive context
-      let contextSections = []
+      const contextSections = []
 
       // Add RAG results if available
       if (ragResults.length > 0) {
@@ -568,6 +583,7 @@ Return only valid JSON.
   }
 
   // Helper method to extract financial metrics
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async extractFinancialMetrics(searchResults: TavilySearchResult[], company: string): Promise<any> {
     const prompt = `
 Extract financial information from these search results for ${company}:
@@ -605,6 +621,7 @@ Return only valid JSON with available data.
   }
 
   // Helper method to extract news highlights
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async extractNewsHighlights(searchResults: TavilySearchResult[], company: string): Promise<any> {
     const prompt = `
 Extract recent news highlights from these search results for ${company}:
@@ -639,6 +656,7 @@ Return only valid JSON.
   }
 
   // Helper method to extract industry insights
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async extractIndustryInsights(searchResults: TavilySearchResult[], company: string, industry: string): Promise<any> {
     const prompt = `
 Extract industry insights from these search results for ${company} in the ${industry} industry:
@@ -675,6 +693,7 @@ Return only valid JSON.
   }
 
   // Helper method to extract company profile
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async extractCompanyProfile(searchResults: TavilySearchResult[], company: string): Promise<any> {
     const prompt = `
 Extract detailed company profile from these search results for ${company}:
@@ -748,6 +767,7 @@ export async function runCompanyResearch({
 }): Promise<{
   report: string
   references: string[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   companyInfo: any
 }> {
   const agent = new CompanyResearchAgent()
@@ -787,6 +807,7 @@ export async function handleCompanyChatQuery({
   namespace?: string
 }): Promise<{
   response: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sources: any[]
   updatedMessages: BaseMessage[]
 }> {

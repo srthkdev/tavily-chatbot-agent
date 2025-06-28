@@ -73,7 +73,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { name, description, url, type = 'company_research', companyData } = body
+    const { name, description, url } = body
 
     // Get the current user from session
     const sessionCookie = request.headers.get('cookie')

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { streamText } from 'ai'
 import { HumanMessage, AIMessage } from '@langchain/core/messages'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { serverConfig } from '@/config/tavily.config'
@@ -31,7 +30,7 @@ async function getUserId() {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json()
-        const { messages, namespace, chatbotId, useWebSearch = false } = body
+        const { messages, namespace, chatbotId } = body
 
         if (!messages || !Array.isArray(messages)) {
             return NextResponse.json({ error: 'Messages array is required' }, { status: 400 })
@@ -115,7 +114,7 @@ export async function POST(request: NextRequest) {
         const stream = new ReadableStream({
             async start(controller) {
                 try {
-                    const sendData = (data: any) => {
+                    const sendData = (data: unknown) => {
                         controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
                     }
 

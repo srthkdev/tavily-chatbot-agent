@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 
-import { clientConfig as config } from "@/config/tavily.config"
 import { useAuth } from "@/contexts/auth-context"
 import { 
   Globe, 
@@ -22,8 +22,6 @@ import {
   Clock,
   Database,
   Loader2,
-  ArrowLeft,
-  Settings,
   Copy,
   Check,
   Building2,
@@ -41,11 +39,25 @@ import {
 export default function DashboardPage() {
   const router = useRouter()
 
-  const { isAuthenticated, isLoading: authLoading, user } = useAuth()
+  const { isAuthenticated, isLoading: authLoading } = useAuth()
   const [searchQuery, setSearchQuery] = useState('')
   const [deleteModal, setDeleteModal] = useState<{ show: boolean; namespace?: string; title?: string }>({ show: false })
   const [copiedItem, setCopiedItem] = useState<string | null>(null)
-  const [chatbots, setChatbots] = useState<any[]>([])
+  const [chatbots, setChatbots] = useState<Array<{
+    $id: string;
+    name: string;
+    description?: string;
+    url?: string;
+    namespace: string;
+    status: string;
+    published?: boolean;
+    publicUrl?: string;
+    pagesCrawled: number;
+    documentsStored: number;
+    createdAt: string;
+    updatedAt?: string;
+    favicon?: string;
+  }>>([])
   const [chatbotsLoading, setChatbotsLoading] = useState(true)
 
   // Redirect to auth if not authenticated
@@ -69,8 +81,8 @@ export default function DashboardPage() {
             setChatbots(result.data)
           }
         }
-      } catch (error) {
-        console.error('Failed to load projects:', error)
+      } catch {
+        console.error('Failed to load projects')
       } finally {
         setChatbotsLoading(false)
       }
@@ -121,7 +133,7 @@ export default function DashboardPage() {
       setCopiedItem(itemId)
       toast.success('Copied to clipboard')
       setTimeout(() => setCopiedItem(null), 2000)
-    } catch (error) {
+    } catch {
       toast.error('Failed to copy to clipboard')
     }
   }
@@ -211,8 +223,8 @@ export default function DashboardPage() {
                       toast.success('Projects refreshed')
                     }
                   }
-                } catch (error) {
-                  console.error('Failed to refresh projects:', error)
+                } catch {
+                  console.error('Failed to refresh projects')
                   toast.error('Failed to refresh projects')
                 } finally {
                   setChatbotsLoading(false)
@@ -271,11 +283,13 @@ export default function DashboardPage() {
                       </CardDescription>
                     </div>
                     {chatbot.favicon && (
-                      <img 
+                      <Image 
                         src={chatbot.favicon} 
                         alt="Favicon" 
+                        width={24}
+                        height={24}
                         className="w-6 h-6 rounded-sm flex-shrink-0 ml-2"
-                        onError={(e) => { e.currentTarget.style.display = 'none' }}
+                        onError={(e: React.SyntheticEvent<HTMLImageElement>) => { e.currentTarget.style.display = 'none' }}
                       />
                     )}
                   </div>
@@ -382,7 +396,7 @@ export default function DashboardPage() {
           <DialogHeader>
             <DialogTitle>Delete Chatbot</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deleteModal.title}"? This action cannot be undone.
+              Are you sure you want to delete &ldquo;{deleteModal.title}&rdquo;? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           

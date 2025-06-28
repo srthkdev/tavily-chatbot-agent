@@ -49,9 +49,9 @@ export async function POST(request: NextRequest) {
     try {
       // Try to create the user account
       user = await account.create(ID.unique(), email, password, name)
-    } catch (accountError: any) {
+    } catch (accountError: unknown) {
       // If user already exists, try to sign them in instead to check if they have a complete profile
-      if (accountError.type === 'user_already_exists') {
+      if (accountError && typeof accountError === 'object' && 'type' in accountError && accountError.type === 'user_already_exists') {
         try {
           session = await account.createEmailPasswordSession(email, password)
           
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
           const existingAccount = new Account(existingClient)
           user = await existingAccount.get()
           
-        } catch (signInError) {
+        } catch {
           throw new Error('An account with this email already exists but the password is incorrect')
         }
       } else {
@@ -170,14 +170,16 @@ export async function POST(request: NextRequest) {
 
     // Handle Appwrite specific errors
     if (error && typeof error === 'object' && 'type' in error) {
-      const appwriteError = error as any
-      if (appwriteError.type === 'user_already_exists') {
+      const appwriteError = error as unknown
+      if (appwriteError && typeof appwriteError === 'object' && 'type' in appwriteError && appwriteError.type === 'user_already_exists') {
         return NextResponse.json(
           { error: 'An account with this email already exists' },
           { status: 409 }
         )
       }
-      if (appwriteError.type === 'general_argument_invalid' && 
+      if (appwriteError && typeof appwriteError === 'object' && 'type' in appwriteError && 
+          appwriteError.type === 'general_argument_invalid' && 
+          'message' in appwriteError && typeof appwriteError.message === 'string' &&
           appwriteError.message.includes('Password')) {
         return NextResponse.json(
           { error: 'Password must be at least 8 characters long' },

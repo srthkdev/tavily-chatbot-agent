@@ -201,6 +201,7 @@ export async function getChatbot(chatbotId: string) {
       clientConfig.appwrite.collections.chatbots,
       chatbotId
     )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     // If the document is not found, return null so callers can handle it gracefully
     if (error?.code === 404 || error?.type === 'document_not_found') {

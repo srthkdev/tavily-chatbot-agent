@@ -14,11 +14,11 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ node: _, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
-          p: ({ node: _, ...props }) => <p {...props} className="mb-2 last:mb-0" />,
-          ol: ({ node: _, ...props }) => <ol {...props} className="list-decimal list-inside" />,
-          ul: ({ node: _, ...props }) => <ul {...props} className="list-disc list-inside" />,
-          li: ({ node: _, ...props }) => <li {...props} className="pb-1" />,
+          a: ({ ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+          p: ({ ...props }) => <p {...props} className="mb-2 last:mb-0" />,
+          ol: ({ ...props }) => <ol {...props} className="list-decimal list-inside" />,
+          ul: ({ ...props }) => <ul {...props} className="list-disc list-inside" />,
+          li: ({ ...props }) => <li {...props} className="pb-1" />,
         }}
       >
         {content}

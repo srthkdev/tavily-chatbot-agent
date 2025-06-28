@@ -11,7 +11,7 @@ export interface ResearchData {
   industry?: string
   hqLocation?: string
   researchReport: string
-  companyInfo: any
+  companyInfo: Record<string, unknown>
   generatedAt: string
   createdAt?: string
   updatedAt?: string

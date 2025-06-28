@@ -30,7 +30,7 @@ export async function GET(
     let user
     try {
       user = await account.get()
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid session' },
         { status: 401 }
@@ -53,7 +53,7 @@ export async function GET(
         if (directResponse.userId === user.$id) {
           chatbot = directResponse
         }
-      } catch (error) {
+      } catch {
         // If direct ID lookup fails, try namespace lookup
         console.log('Direct ID lookup failed, trying namespace lookup')
       }
@@ -140,7 +140,7 @@ export async function PUT(
     let user
     try {
       user = await account.get()
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid session' },
         { status: 401 }
@@ -163,7 +163,7 @@ export async function PUT(
         if (directResponse.userId === user.$id) {
           chatbot = directResponse
         }
-      } catch (error) {
+      } catch {
         // If direct ID lookup fails, try namespace lookup
         console.log('Direct ID lookup failed, trying namespace lookup')
       }
@@ -193,7 +193,7 @@ export async function PUT(
       }
 
       // Update chatbot with allowed fields
-      const allowedUpdates: any = {
+      const allowedUpdates: Record<string, unknown> = {
         lastUpdated: new Date().toISOString()
       }
 
@@ -256,7 +256,7 @@ export async function DELETE(
     let user
     try {
       user = await account.get()
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { error: 'Invalid session' },
         { status: 401 }
@@ -279,7 +279,7 @@ export async function DELETE(
         if (directResponse.userId === user.$id) {
           chatbot = directResponse
         }
-      } catch (error) {
+      } catch {
         // If direct ID lookup fails, try namespace lookup
         console.log('Direct ID lookup failed, trying namespace lookup')
       }

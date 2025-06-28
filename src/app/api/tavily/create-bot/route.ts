@@ -5,7 +5,7 @@ import { saveIndex } from '@/lib/storage'
 import { serverConfig as config, clientConfig } from '@/config/tavily.config'
 import { Client, Account, Databases, ID } from 'node-appwrite'
 import { cookies } from 'next/headers'
-import { searchAndCreateBot, searchWeb } from '@/lib/tavily'
+import { searchAndCreateBot } from '@/lib/tavily'
 
 // Enhanced company metadata extraction using AI
 async function extractCompanyMetadata(url: string, content: string) {
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     let user
     try {
       user = await account.get()
-    } catch (error) {
+    } catch {
       cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },

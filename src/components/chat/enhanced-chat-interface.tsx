@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { Send, Bot, User, ExternalLink, Building, Globe, Clock, CheckCircle } from 'lucide-react'
+import { Send, Bot, User, Building, Globe, Clock, CheckCircle } from 'lucide-react'
 import { MarkdownRenderer } from './markdown-renderer'
 import { SourceCitation } from './source-citation'
 
@@ -64,12 +64,6 @@ export function EnhancedChatInterface({
     scrollToBottom()
   }, [messages])
 
-  useEffect(() => {
-    if (initialMessage && messages.length === 0) {
-      handleSend(initialMessage)
-    }
-  }, [initialMessage])
-
   // Load chat history when component mounts
   useEffect(() => {
     const loadChatHistory = async () => {
@@ -80,7 +74,14 @@ export function EnhancedChatInterface({
         if (response.ok) {
           const result = await response.json()
           if (result.success && result.data.messages.length > 0) {
-            const historyMessages: Message[] = result.data.messages.map((msg: any) => ({
+            const historyMessages: Message[] = result.data.messages.map((msg: {
+              $id?: string;
+              role: 'user' | 'assistant';
+              content: string;
+              sources?: Source[];
+              timestamp: string;
+              isCompanySpecific?: boolean;
+            }) => ({
               id: msg.$id || Date.now().toString(),
               role: msg.role,
               content: msg.content,
@@ -99,7 +100,7 @@ export function EnhancedChatInterface({
     loadChatHistory()
   }, [chatbotId])
 
-  const handleSend = async (messageContent?: string) => {
+  const handleSend = useCallback(async (messageContent?: string) => {
     const content = messageContent || input.trim()
     if (!content || isLoading) return
 
@@ -151,7 +152,7 @@ export function EnhancedChatInterface({
         throw new Error('No response body')
       }
 
-      let assistantMessage: Message = {
+      const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: '',
@@ -241,7 +242,13 @@ export function EnhancedChatInterface({
       setIsLoading(false)
       setStatus('')
     }
-  }
+  }, [messages, namespace, chatbotId, isLoading, input])
+
+  useEffect(() => {
+    if (initialMessage && messages.length === 0) {
+      handleSend(initialMessage)
+    }
+  }, [initialMessage, messages.length, handleSend])
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {

@@ -1,4 +1,4 @@
-import { createAdminClient, createSessionClient } from '@/lib/appwrite'
+import { createAdminClient } from '@/lib/appwrite'
 import { clientConfig } from '@/config/tavily.config'
 import { ID, Query } from 'node-appwrite'
 
@@ -8,6 +8,7 @@ export interface ChatMessage {
   userId: string
   role: 'user' | 'assistant'
   content: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sources?: any[]
   isCompanySpecific?: boolean
   timestamp: string
