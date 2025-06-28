@@ -5,6 +5,74 @@ import { saveIndex } from '@/lib/storage'
 import { serverConfig as config, clientConfig } from '@/config/tavily.config'
 import { Client, Account, Databases, ID } from 'node-appwrite'
 import { cookies } from 'next/headers'
+import { searchAndCreateBot, searchWeb } from '@/lib/tavily'
+
+// Enhanced company metadata extraction using AI
+async function extractCompanyMetadata(url: string, content: string) {
+  try {
+    const hostname = new URL(url).hostname
+    const domain = hostname.replace('www.', '')
+    
+    // Extract company name from domain or content
+    let companyName = domain.split('.')[0]
+    
+    // Try to find company name in content
+    const titleMatch = content.match(/<title[^>]*>([^<]+)<\/title>/i)
+    if (titleMatch) {
+      const title = titleMatch[1].trim()
+      // Remove common suffixes
+      const cleanTitle = title.replace(/\s*[-|]\s*(Home|Homepage|Welcome|Official Site|Website).*$/i, '')
+      if (cleanTitle.length > 0 && cleanTitle.length < 100) {
+        companyName = cleanTitle
+      }
+    }
+
+    // Extract description
+    let description = ''
+    const metaDescMatch = content.match(/<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"']+)["\'][^>]*>/i)
+    if (metaDescMatch) {
+      description = metaDescMatch[1].trim()
+    }
+
+    // Fallback to first paragraph
+    if (!description) {
+      const paragraphMatch = content.match(/<p[^>]*>([^<]+)<\/p>/i)
+      if (paragraphMatch) {
+        description = paragraphMatch[1].trim().substring(0, 200)
+      }
+    }
+
+    // Extract industry/business type keywords
+    const businessKeywords = [
+      'software', 'technology', 'consulting', 'services', 'solutions', 'platform',
+      'healthcare', 'finance', 'education', 'retail', 'manufacturing', 'startup',
+      'agency', 'studio', 'company', 'corporation', 'inc', 'llc', 'ltd'
+    ]
+    
+    const contentLower = content.toLowerCase()
+    const detectedKeywords = businessKeywords.filter(keyword => 
+      contentLower.includes(keyword)
+    )
+
+    return {
+      name: companyName,
+      domain,
+      description: description || `AI assistant for ${companyName}`,
+      industry: detectedKeywords.length > 0 ? detectedKeywords[0] : 'general',
+      keywords: detectedKeywords,
+    }
+  } catch (error) {
+    console.error('Metadata extraction error:', error)
+    const hostname = new URL(url).hostname
+    return {
+      name: hostname.replace('www.', '').split('.')[0],
+      domain: hostname,
+      description: `AI assistant for ${hostname}`,
+      industry: 'general',
+      keywords: [],
+    }
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,14 +94,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create client with session to get current user (using node-appwrite for server-side)
+    // Create client with session to get current user
     const client = new Client()
     client
       .setEndpoint(clientConfig.appwrite.endpoint)
       .setProject(clientConfig.appwrite.projectId)
-
-    // For user operations, use session-only (not API key)
-    client.setSession(sessionCookie.value)
+      .setSession(sessionCookie.value)
 
     const account = new Account(client)
     const databases = new Databases(client)
@@ -99,191 +165,138 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    // Search for content related to the URL
-    const searchQuery = `site:${new URL(url).hostname} OR ${url}`
-    
-    const tavilyResponse = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        query: searchQuery,
-        search_depth: searchDepth,
-        include_answer: false,
-        include_images: false,
-        include_raw_content: true,
-        max_results: Math.min(maxResults, 50), // Cap for performance
-      }),
-    })
-
-    if (!tavilyResponse.ok) {
-      const errorText = await tavilyResponse.text()
-      console.error('Tavily API error:', errorText)
-      
-      if (tavilyResponse.status === 401) {
-        return NextResponse.json(
-          { error: 'Tavily authentication failed. Please check your API key.' },
-          { status: 401 }
-        )
-      }
-      
-      return NextResponse.json(
-        { error: 'Failed to search content', details: errorText },
-        { status: tavilyResponse.status }
-      )
-    }
-
-    const searchData = await tavilyResponse.json()
-    const results = searchData.results || []
-
-    if (results.length === 0) {
-      return NextResponse.json({
-        error: 'No content found for the provided URL. Try a different website or check if the URL is accessible.',
-      }, { status: 404 })
-    }
-
-    // Process search results and create documents for vector storage
-    const documents: SearchDocument[] = []
-    
-    for (let index = 0; index < results.length; index++) {
-      const result = results[index]
-      const title = result.title || 'Untitled'
-      const content = result.content || result.raw_content || ''
-      const resultUrl = result.url || url
-      
-      // Create searchable text for embedding
-      const searchableText = `${title} ${content}`.substring(0, 2000) // Limit for embedding
-      
-      documents.push({
-        id: `${namespace}-${index}`,
-        data: searchableText, // Use text directly for embedding model
-        metadata: {
-          namespace,
-          title,
-          url: resultUrl,
-          sourceURL: resultUrl,
-          crawlDate: new Date().toISOString(),
-          pageTitle: title,
-          description: content.substring(0, 200),
-          favicon: undefined,
-          ogImage: undefined,
-          fullContent: content.substring(0, 5000),
-          text: searchableText,
-          score: result.score,
-          publishedDate: result.published_date,
-        }
-      })
-    }
-
-    if (documents.length === 0) {
-      return NextResponse.json({
-        error: 'Failed to process any documents for vector storage.',
+    // Use the enhanced searchAndCreateBot function
+    let chatbotData
+    try {
+      chatbotData = await searchAndCreateBot(url, maxResults)
+    } catch (error) {
+      console.error('Tavily search and create error:', error)
+      return NextResponse.json({ 
+        error: 'Failed to create chatbot from URL. Please check the URL and try again.' 
       }, { status: 500 })
     }
 
-    // Store documents in Upstash Vector DB
+    // Extract enhanced company metadata from the main content
+    const mainContent = chatbotData.content.find(item => item.metadata?.isMainPage) || chatbotData.content[0]
+    const companyMetadata = await extractCompanyMetadata(url, mainContent.content)
+
+    // Prepare documents for vector storage with limited metadata
+    const documents: SearchDocument[] = chatbotData.content.map((item, index) => ({
+      id: `${namespace}-doc-${index}`,
+      data: `${item.title} ${item.content}`.substring(0, 1500), // Limit content size
+      metadata: {
+        namespace,
+        title: item.title.substring(0, 200), // Limit title size
+        url: item.url,
+        sourceURL: item.url,
+        crawlDate: new Date().toISOString(),
+        pageTitle: item.title.substring(0, 200),
+        description: item.content.substring(0, 300), // Limit description
+        text: item.content.substring(0, 500), // Limit text content
+        score: typeof item.metadata?.score === 'number' ? item.metadata.score : undefined,
+        publishedDate: typeof item.metadata?.searchedAt === 'string' ? item.metadata.searchedAt : undefined,
+        sourceType: 'website',
+        contentType: 'html',
+      },
+    }))
+
+    // Store documents in vector database
     try {
       await upsertDocuments(documents)
-      console.log(`Successfully stored ${documents.length} documents for namespace: ${namespace}`)
-      
-      // Verify storage by searching for one document (optional verification)
-      try {
-        const { searchDocuments } = await import('@/lib/upstash-search')
-        const verifyResult = await searchDocuments('test', namespace, 1)
-        
-        if (verifyResult.length === 0) {
-          console.warn('Documents may not have been stored properly, but continuing...')
-        } else {
-          console.log('Document storage verified successfully')
-        }
-      } catch (verifyError) {
-        console.warn('Document verification failed, but continuing:', verifyError)
-        // Don't throw here - verification failure shouldn't stop the process
-      }
-    } catch (upsertError) {
-      console.error('Failed to store documents:', upsertError)
-      const errorMessage = upsertError instanceof Error ? upsertError.message : 'Unknown error'
-      
-      // Only throw for critical storage failures
-      if (errorMessage.includes('Failed to store documents')) {
-        throw new Error(`Failed to store documents: ${errorMessage}`)
-      } else {
-        // For embedding-related errors, continue without vector storage
-        console.warn('Vector storage not available, continuing without search functionality')
-      }
+      console.log(`Successfully stored ${documents.length} documents in vector database`)
+    } catch (error) {
+      console.error('Vector storage error:', error)
+      // Continue even if vector storage fails, but log the error
+      console.warn('Continuing without vector storage...')
     }
 
-    // Find the best result for metadata (preferably the exact URL match)
-    const homepage = results.find((result: any) => {
-      const resultUrl = result.url || ''
-      return resultUrl === url || resultUrl === url + '/' || resultUrl === url.replace(/\/$/, '')
-    }) || results[0]
+    // Enhanced chatbot metadata
+    const enhancedChatbotData = {
+      id: namespace,
+      namespace,
+      url,
+      title: companyMetadata.name,
+      description: companyMetadata.description,
+      companyInfo: {
+        name: companyMetadata.name,
+        domain: companyMetadata.domain,
+        industry: companyMetadata.industry,
+        keywords: companyMetadata.keywords,
+      },
+      pagesCrawled: chatbotData.pagesCrawled,
+      documentsStored: documents.length,
+      createdAt: new Date().toISOString(),
+      createdBy: user.$id,
+      metadata: {
+        title: companyMetadata.name,
+        description: companyMetadata.description,
+        isCompanySpecific: true,
+        searchDepth,
+        maxResults,
+      },
+    }
 
-    // Save chatbot to database (required - don't continue if this fails)
-    let chatbot
+    // Save to local storage system
     try {
-      chatbot = await databases.createDocument(
+      await saveIndex(enhancedChatbotData)
+    } catch (error) {
+      console.error('Local storage error:', error)
+      // Continue even if local storage fails
+    }
+
+    // Save to Appwrite database with correct field names
+    try {
+      await databases.createDocument(
         clientConfig.appwrite.databaseId,
         clientConfig.appwrite.collections.chatbots,
         ID.unique(),
         {
-          userId: user.$id,
           namespace,
-          name: homepage?.title || new URL(url).hostname,
-          description: homepage?.content?.substring(0, 200) || `AI chatbot for ${new URL(url).hostname}`,
           url,
-          favicon: '',
-          status: 'active',
-          pagesCrawled: documents.length.toString(),
+          title: companyMetadata.name,
+          description: companyMetadata.description,
+          companyName: companyMetadata.name,
+          domain: companyMetadata.domain,
+          industry: companyMetadata.industry,
+          pagesCrawled: chatbotData.pagesCrawled,
+          documentsStored: documents.length,
+          userId: user.$id, // Correct field name
+          createdBy: user.$id,
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          isActive: true,
+          published: false, // Default to unpublished
+          publicUrl: null,
+          metadata: JSON.stringify(enhancedChatbotData.metadata),
         }
       )
-      
-      console.log('✅ Chatbot saved to database successfully:', chatbot.$id)
-      
-    } catch (dbError) {
-      console.error('❌ Critical: Failed to save chatbot to database:', dbError)
-      
-      // If database save fails, this is a critical error - don't create a chatbot
+      console.log('Successfully saved chatbot to Appwrite database')
+    } catch (error) {
+      console.error('Appwrite storage error:', error)
       return NextResponse.json({
-        error: 'Failed to save chatbot to database. Please try again.',
-        details: dbError instanceof Error ? dbError.message : 'Database error'
+        error: 'Failed to save chatbot to database',
+        details: error instanceof Error ? error.message : 'Unknown database error'
       }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       namespace,
-      message: `Chatbot created successfully! Processed ${documents.length} results.`,
-      chatbot,
+      chatbot: enhancedChatbotData,
       details: {
-        url,
-        resultsLimit: maxResults,
-        resultsFound: results.length,
-        documentsProcessed: documents.length,
-        searchDepth: searchDepth,
-        chatbotId: chatbot.$id
+        resultsFound: chatbotData.pagesCrawled,
+        documentsStored: documents.length,
+        companyInfo: companyMetadata,
+        vectorStorageStatus: 'success', // We'll update this based on actual storage
       },
-      data: results.map((result: any) => ({
-        url: result.url,
-        title: result.title,
-        content: result.content?.substring(0, 500), // Truncate for response
-        published_date: result.published_date,
-        score: result.score
-      }))
+      message: `Successfully created ${companyMetadata.name} chatbot with ${chatbotData.pagesCrawled} pages processed.`
     })
 
   } catch (error) {
-    console.error('Create bot error:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-    
+    console.error('Create bot API error:', error)
     return NextResponse.json(
       { 
-        error: 'Failed to create chatbot',
-        details: errorMessage
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }
     )

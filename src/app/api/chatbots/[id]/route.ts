@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getChatbot, updateChatbot, deleteChatbot } from '@/lib/appwrite'
+import { createSessionClient } from '@/lib/appwrite'
 import { cookies } from 'next/headers'
-import { Client, Account, Databases, Query } from 'node-appwrite'
+import { Query } from 'node-appwrite'
 import { clientConfig } from '@/config/tavily.config'
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id: chatbotId } = await context.params
+    const chatbotId = params.id
 
     // Check authentication
     const cookieStore = await cookies()
@@ -22,66 +22,79 @@ export async function GET(
       )
     }
 
-    // Create client with session
-    const client = new Client()
-    client
-      .setEndpoint(clientConfig.appwrite.endpoint)
-      .setProject(clientConfig.appwrite.projectId)
-      .setSession(sessionCookie.value)
-
-    const account = new Account(client)
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
 
     // Get current user
     let user
     try {
       user = await account.get()
     } catch (error) {
-      cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },
         { status: 401 }
       )
     }
 
-    // Get chatbot
-    const chatbot = await getChatbot(chatbotId)
+    // Get chatbot by namespace and verify ownership
+    try {
+      const response = await databases.listDocuments(
+        clientConfig.appwrite.databaseId,
+        clientConfig.appwrite.collections.chatbots,
+        [
+          Query.equal('namespace', [chatbotId]),
+          Query.equal('userId', [user.$id]),
+          Query.limit(1)
+        ]
+      )
+      
+      if (response.documents.length === 0) {
+        return NextResponse.json(
+          { error: 'Chatbot not found or access denied' },
+          { status: 404 }
+        )
+      }
+      
+      const chatbot = response.documents[0]
 
-    if (!chatbot) {
+      return NextResponse.json({
+        success: true,
+        data: chatbot
+      })
+      
+    } catch (error) {
+      console.error('Database query error:', error)
       return NextResponse.json(
-        { error: 'Chatbot not found' },
-        { status: 404 }
+        { error: 'Failed to fetch chatbot' },
+        { status: 500 }
       )
     }
-
-    // Check if user owns this chatbot
-    if (chatbot!.userId !== user.$id) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      )
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: chatbot
-    })
 
   } catch (error) {
-    console.warn('Get chatbot error:', error)
+    console.error('Get chatbot error:', error)
     return NextResponse.json(
-      { error: 'Chatbot not found' },
-      { status: 404 }
+      { error: 'Internal server error' },
+      { status: 500 }
     )
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
-    const { id: chatbotId } = await context.params
-    const updateData = await request.json()
+    const chatbotId = params.id
+    let updateData
+    
+    try {
+      updateData = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      )
+    }
 
     // Check authentication
     const cookieStore = await cookies()
@@ -94,21 +107,14 @@ export async function PUT(
       )
     }
 
-    // Create client with session
-    const client = new Client()
-    client
-      .setEndpoint(clientConfig.appwrite.endpoint)
-      .setProject(clientConfig.appwrite.projectId)
-      .setSession(sessionCookie.value)
-
-    const account = new Account(client)
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
 
     // Get current user
     let user
     try {
       user = await account.get()
     } catch (error) {
-      cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },
         { status: 401 }
@@ -116,38 +122,59 @@ export async function PUT(
     }
 
     // Get chatbot to verify ownership
-    const chatbot = await getChatbot(chatbotId)
+    try {
+      const response = await databases.listDocuments(
+        clientConfig.appwrite.databaseId,
+        clientConfig.appwrite.collections.chatbots,
+        [
+          Query.equal('namespace', [chatbotId]),
+          Query.equal('userId', [user.$id]),
+          Query.limit(1)
+        ]
+      )
+      
+      if (response.documents.length === 0) {
+        return NextResponse.json(
+          { error: 'Chatbot not found or access denied' },
+          { status: 404 }
+        )
+      }
+      
+      const chatbot = response.documents[0]
 
-    if (!chatbot) {
+      // Update chatbot with allowed fields
+      const allowedUpdates: any = {
+        lastUpdated: new Date().toISOString()
+      }
+
+      if (updateData.title) allowedUpdates.title = updateData.title
+      if (updateData.description) allowedUpdates.description = updateData.description
+      if (typeof updateData.isActive === 'boolean') allowedUpdates.isActive = updateData.isActive
+
+      const updatedChatbot = await databases.updateDocument(
+        clientConfig.appwrite.databaseId,
+        clientConfig.appwrite.collections.chatbots,
+        chatbot.$id,
+        allowedUpdates
+      )
+
+      return NextResponse.json({
+        success: true,
+        data: updatedChatbot
+      })
+      
+    } catch (error) {
+      console.error('Database update error:', error)
       return NextResponse.json(
-        { error: 'Chatbot not found' },
-        { status: 404 }
+        { error: 'Failed to update chatbot' },
+        { status: 500 }
       )
     }
-
-    if (chatbot!.userId !== user.$id) {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      )
-    }
-
-    // Update chatbot
-    const updatedChatbot = await updateChatbot(chatbotId, {
-      name: updateData.name,
-      description: updateData.description,
-      status: updateData.status,
-    })
-
-    return NextResponse.json({
-      success: true,
-      data: updatedChatbot
-    })
 
   } catch (error) {
-    console.warn('Update chatbot error:', error)
+    console.error('Update chatbot error:', error)
     return NextResponse.json(
-      { error: 'Failed to update chatbot' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
@@ -155,9 +182,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
+    const chatbotId = params.id
+
     // Check authentication
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get('appwrite-session')
@@ -169,108 +198,65 @@ export async function DELETE(
       )
     }
 
-    // Create client with session
-    const client = new Client()
-    client
-      .setEndpoint(clientConfig.appwrite.endpoint)
-      .setProject(clientConfig.appwrite.projectId)
-      .setSession(sessionCookie.value)
-
-    const account = new Account(client)
-    const databases = new Databases(client)
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
 
     // Get current user
     let user
     try {
       user = await account.get()
     } catch (error) {
-      cookieStore.delete('appwrite-session')
       return NextResponse.json(
         { error: 'Invalid session' },
         { status: 401 }
       )
     }
 
-    const { id: chatbotId } = await context.params
-
-    // First, check if the chatbot exists and belongs to the user
+    // Get chatbot to verify ownership
     try {
-      const chatbot = await databases.getDocument(
+      const response = await databases.listDocuments(
         clientConfig.appwrite.databaseId,
         clientConfig.appwrite.collections.chatbots,
-        chatbotId
-      )
-
-      // Verify ownership
-      if (chatbot.userId !== user.$id) {
-        return NextResponse.json(
-          { error: 'Access denied. You can only delete your own chatbots.' },
-          { status: 403 }
-        )
-      }
-
-      // Delete all conversations for this chatbot
-      const conversations = await databases.listDocuments(
-        clientConfig.appwrite.databaseId,
-        clientConfig.appwrite.collections.conversations,
         [
-          Query.equal('chatbotId', chatbotId)
+          Query.equal('namespace', [chatbotId]),
+          Query.equal('userId', [user.$id]),
+          Query.limit(1)
         ]
       )
-
-      // Delete all messages for each conversation
-      for (const conversation of conversations.documents) {
-        const messages = await databases.listDocuments(
-          clientConfig.appwrite.databaseId,
-          clientConfig.appwrite.collections.messages,
-          [
-            Query.equal('conversationId', conversation.$id)
-          ]
-        )
-
-        // Delete messages
-        for (const message of messages.documents) {
-          await databases.deleteDocument(
-            clientConfig.appwrite.databaseId,
-            clientConfig.appwrite.collections.messages,
-            message.$id
-          )
-        }
-
-        // Delete conversation
-        await databases.deleteDocument(
-          clientConfig.appwrite.databaseId,
-          clientConfig.appwrite.collections.conversations,
-          conversation.$id
+      
+      if (response.documents.length === 0) {
+        return NextResponse.json(
+          { error: 'Chatbot not found or access denied' },
+          { status: 404 }
         )
       }
+      
+      const chatbot = response.documents[0]
 
-      // Finally, delete the chatbot
+      // Delete the chatbot
       await databases.deleteDocument(
         clientConfig.appwrite.databaseId,
         clientConfig.appwrite.collections.chatbots,
-        chatbotId
+        chatbot.$id
       )
 
       return NextResponse.json({
         success: true,
         message: 'Chatbot deleted successfully'
       })
-
-    } catch (error: any) {
-      if (error.code === 404) {
-        return NextResponse.json(
-          { error: 'Chatbot not found' },
-          { status: 404 }
-        )
-      }
-      throw error
+      
+    } catch (error) {
+      console.error('Database delete error:', error)
+      return NextResponse.json(
+        { error: 'Failed to delete chatbot' },
+        { status: 500 }
+      )
     }
 
   } catch (error) {
-    console.warn('Delete chatbot error:', error)
+    console.error('Delete chatbot error:', error)
     return NextResponse.json(
-      { error: 'Failed to delete chatbot' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

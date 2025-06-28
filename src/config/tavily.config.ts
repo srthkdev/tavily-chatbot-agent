@@ -5,44 +5,48 @@ import { groq } from '@ai-sdk/groq'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 
-// AI provider configuration
+// AI provider configuration with updated priority
 const AI_PROVIDERS = {
   openai: {
     model: openai('gpt-4o-mini'),
     enabled: !!process.env.OPENAI_API_KEY,
-    name: 'OpenAI GPT-4o Mini'
-  },
-  anthropic: {
-    model: anthropic('claude-3-5-sonnet-20241022'),
-    enabled: !!process.env.ANTHROPIC_API_KEY,
-    name: 'Anthropic Claude 3.5 Sonnet'
+    name: 'OpenAI GPT-4o Mini',
+    priority: 1
   },
   gemini: {
-    model: google('gemini-1.5-flash'),
+    model: google('gemini-2.0-flash-exp'),
     enabled: !!process.env.GOOGLE_API_KEY,
-    name: 'Google Gemini 1.5 Flash'
+    name: 'Google Gemini 2.0 Flash',
+    priority: 2
   },
   groq: {
     model: groq('llama-3.3-70b-versatile'),
     enabled: !!process.env.GROQ_API_KEY,
-    name: 'Groq Llama 3.3 70B'
+    name: 'Groq Llama 3.3 70B',
+    priority: 3
+  },
+  anthropic: {
+    model: anthropic('claude-3-5-sonnet-20241022'),
+    enabled: !!process.env.ANTHROPIC_API_KEY,
+    name: 'Anthropic Claude 3.5 Sonnet',
+    priority: 4
   },
 }
 
-// Get the active AI provider with fallback priority
+// Get the active AI provider with updated priority: OpenAI > Gemini > Groq > Anthropic
 function getAIModel() {
   // Only check on server side
   if (typeof window !== 'undefined') {
     return null
   }
   
-  // Priority: Groq > Anthropic > OpenAI > Gemini (testing Groq first for reliability)
-  if (AI_PROVIDERS.groq.enabled) return AI_PROVIDERS.groq.model
-  if (AI_PROVIDERS.anthropic.enabled) return AI_PROVIDERS.anthropic.model
+  // Priority: OpenAI > Gemini > Groq > Anthropic
   if (AI_PROVIDERS.openai.enabled) return AI_PROVIDERS.openai.model
   if (AI_PROVIDERS.gemini.enabled) return AI_PROVIDERS.gemini.model
+  if (AI_PROVIDERS.groq.enabled) return AI_PROVIDERS.groq.model
+  if (AI_PROVIDERS.anthropic.enabled) return AI_PROVIDERS.anthropic.model
   
-  throw new Error('No AI provider configured. Please set at least one API key: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, or GROQ_API_KEY')
+  throw new Error('No AI provider configured. Please set at least one API key: OPENAI_API_KEY, GOOGLE_API_KEY, GROQ_API_KEY, or ANTHROPIC_API_KEY')
 }
 
 // Rate limiter factory
@@ -89,8 +93,22 @@ const config = {
   ai: {
     model: getAIModel(),
     temperature: 0.7,
-    maxTokens: 1000,
-    systemPrompt: `You are a helpful AI assistant. If a user greets you or engages in small talk, respond politely without referencing any specific website. For questions about website content, answer using ONLY the provided context from Tavily search results. Do not use any other knowledge. If the context isn't sufficient to answer, say so explicitly and suggest searching for more specific information.`,
+    maxTokens: 2000,
+    systemPrompt: `You are an AI assistant representing a specific company or organization. When a chatbot is created from a company's website, you should:
+
+1. **Act as the company representative**: Respond as if you work for the company, using "we", "our", and "us" when referring to the company.
+
+2. **Provide comprehensive information**: Answer questions about the company's products, services, history, values, team, and any other relevant information found in the company's content.
+
+3. **Use provided context**: Base your responses on the information gathered from the company's website and related sources. Always cite sources using [1], [2], etc. format.
+
+4. **Be helpful and professional**: Maintain the company's tone and brand voice while being informative and helpful.
+
+5. **Handle limitations gracefully**: If asked about information not available in the provided context, politely explain that you don't have that specific information and suggest contacting the company directly.
+
+6. **Include relevant resources**: When appropriate, reference specific pages, documents, or contact information from the company's website.
+
+For general conversations (not company-specific), respond as a helpful AI assistant without claiming to represent any company.`,
     providers: AI_PROVIDERS,
   },
 

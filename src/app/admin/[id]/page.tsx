@@ -6,55 +6,106 @@ import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Globe, Database, Upload, FileText, Share2, Loader2, AlertCircle } from "lucide-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ArrowLeft, Globe, Database, Upload, FileText, Share2, Loader2, AlertCircle, Building, BarChart3, Plus, File, Type } from "lucide-react"
+
+interface Chatbot {
+  $id: string
+  namespace: string
+  title: string
+  description: string
+  companyName: string
+  domain: string
+  industry: string
+  pagesCrawled: number
+  documentsStored: number
+  published: boolean
+  publicUrl: string | null
+  createdAt: string
+  lastUpdated: string
+}
+
+interface TrainingLog {
+  $id: string
+  contentType: string
+  title: string
+  fileName: string | null
+  chunksAdded: number
+  contentLength: number
+  addedAt: string
+}
 
 export default function ChatbotAdminPage() {
     const params = useParams()
     const chatbotId = params.id as string
     
-    const [chatbot, setChatbot] = useState<any>(null)
+    const [chatbot, setChatbot] = useState<Chatbot | null>(null)
+    const [trainingLogs, setTrainingLogs] = useState<TrainingLog[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    
+    // Training data states
     const [textInput, setTextInput] = useState('')
+    const [textTitle, setTextTitle] = useState('')
     const [fileInput, setFileInput] = useState<File | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    
+    // Publishing states
     const [isPublishing, setIsPublishing] = useState(false)
     const [publicUrl, setPublicUrl] = useState<string | null>(null)
 
     useEffect(() => {
         if (chatbotId) {
-            const fetchChatbot = async () => {
-                try {
-                    setLoading(true)
-                    const response = await fetch(`/api/chatbots/${chatbotId}`)
-                    if (response.ok) {
-                        const result = await response.json()
-                        if (result.success) {
-                            setChatbot(result.data)
-                            if(result.data.publicUrl) {
-                                setPublicUrl(window.location.origin + result.data.publicUrl)
-                            }
-                        } else {
-                            setError(result.error || 'Chatbot not found')
-                        }
-                    } else if (response.status === 404) {
-                        setError('Chatbot not found')
-                        // Auto-redirect to dashboard after 3 seconds
-                        setTimeout(() => {
-                            window.location.href = '/dashboard'
-                        }, 3000)
-                    } else {
-                        setError('Failed to fetch chatbot data')
-                    }
-                } catch (e) {
-                    setError('An unexpected error occurred')
-                } finally {
-                    setLoading(false)
-                }
-            }
-            fetchChatbot()
+            fetchChatbotData()
+            fetchTrainingLogs()
         }
     }, [chatbotId])
+
+    const fetchChatbotData = async () => {
+        try {
+            setLoading(true)
+            const response = await fetch(`/api/chatbots/${chatbotId}`)
+            if (response.ok) {
+                const result = await response.json()
+                if (result.success) {
+                    setChatbot(result.data)
+                    if(result.data.publicUrl) {
+                        setPublicUrl(window.location.origin + result.data.publicUrl)
+                    }
+                } else {
+                    setError(result.error || 'Chatbot not found')
+                }
+            } else if (response.status === 404) {
+                setError('Chatbot not found')
+                setTimeout(() => {
+                    window.location.href = '/dashboard'
+                }, 3000)
+            } else {
+                setError('Failed to fetch chatbot data')
+            }
+        } catch (e) {
+            setError('An unexpected error occurred')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const fetchTrainingLogs = async () => {
+        try {
+            const response = await fetch(`/api/chatbots/${chatbotId}/data`)
+            if (response.ok) {
+                const result = await response.json()
+                if (result.success) {
+                    setTrainingLogs(result.data)
+                }
+            }
+        } catch (error) {
+            console.error('Failed to fetch training logs:', error)
+        }
+    }
 
     const handleTextSubmit = async () => {
         if (!textInput.trim() || !chatbot) return
@@ -62,20 +113,27 @@ export default function ChatbotAdminPage() {
 
         const formData = new FormData()
         formData.append('text', textInput)
+        formData.append('title', textTitle || 'Text Training Data')
 
         try {
             const response = await fetch(`/api/chatbots/${chatbot.namespace}/data`, {
                 method: 'POST',
                 body: formData
             })
-            if (response.ok) {
+            
+            const result = await response.json()
+            
+            if (response.ok && result.success) {
                 setTextInput('')
-                alert('Text content added successfully!')
+                setTextTitle('')
+                alert(`Successfully added ${result.details.chunksAdded} chunks of training data!`)
+                fetchChatbotData() // Refresh chatbot data
+                fetchTrainingLogs() // Refresh training logs
             } else {
-                alert('Failed to add text content.')
+                alert(result.error || 'Failed to add text content.')
             }
         } catch (e) {
-            alert('An error occurred.')
+            alert('An error occurred while adding text content.')
         } finally {
             setIsSubmitting(false)
         }
@@ -93,20 +151,30 @@ export default function ChatbotAdminPage() {
 
         const formData = new FormData()
         formData.append('file', fileInput)
+        formData.append('title', fileInput.name)
 
         try {
             const response = await fetch(`/api/chatbots/${chatbot.namespace}/data`, {
                 method: 'POST',
                 body: formData
             })
-            if (response.ok) {
+            
+            const result = await response.json()
+            
+            if (response.ok && result.success) {
                 setFileInput(null)
-                alert('File uploaded successfully!')
+                // Reset file input
+                const fileInputElement = document.getElementById('file-upload') as HTMLInputElement
+                if (fileInputElement) fileInputElement.value = ''
+                
+                alert(`Successfully added ${result.details.chunksAdded} chunks from ${result.details.fileName}!`)
+                fetchChatbotData() // Refresh chatbot data
+                fetchTrainingLogs() // Refresh training logs
             } else {
-                alert('Failed to upload file.')
+                alert(result.error || 'Failed to upload file.')
             }
         } catch (e) {
-            alert('An error occurred.')
+            alert('An error occurred while uploading the file.')
         } finally {
             setIsSubmitting(false)
         }
@@ -123,22 +191,21 @@ export default function ChatbotAdminPage() {
                 body: JSON.stringify({ published: publish })
             })
 
-            if(response.ok) {
-                const result = await response.json()
-                if (result.success) {
-                    setChatbot({ ...chatbot, published: publish, publicUrl: result.publicUrl })
-                    if(result.publicUrl) {
-                        setPublicUrl(window.location.origin + result.publicUrl)
-                    } else {
-                        setPublicUrl(null)
-                    }
-                    alert(`Chatbot ${publish ? 'published' : 'unpublished'} successfully!`)
+            const result = await response.json()
+            
+            if(response.ok && result.success) {
+                setChatbot({ ...chatbot, published: publish, publicUrl: result.publicUrl })
+                if(result.publicUrl) {
+                    setPublicUrl(window.location.origin + result.publicUrl)
+                } else {
+                    setPublicUrl(null)
                 }
+                alert(result.message)
             } else {
-                alert('Failed to update chatbot status.')
+                alert(result.error || 'Failed to update chatbot status.')
             }
         } catch(e) {
-            alert('An error occurred.')
+            alert('An error occurred while updating publish status.')
         } finally {
             setIsPublishing(false)
         }
@@ -147,7 +214,10 @@ export default function ChatbotAdminPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-screen">
-                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+                    <p className="text-muted-foreground">Loading chatbot admin panel...</p>
+                </div>
             </div>
         )
     }
@@ -176,110 +246,407 @@ export default function ChatbotAdminPage() {
     return (
         <div className="min-h-screen bg-background">
             <header className="bg-card border-b p-3">
-                <div className="flex items-center gap-2 max-w-5xl mx-auto">
+                <div className="flex items-center gap-2 max-w-7xl mx-auto">
                     <Button variant="ghost" size="icon" asChild>
                         <Link href="/dashboard">
                             <ArrowLeft className="w-5 h-5 text-muted-foreground" />
                         </Link>
                     </Button>
-                    <h1 className="text-md font-semibold truncate text-foreground">{chatbot?.name || 'Manage Chatbot'}</h1>
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                            <Building className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                            <h1 className="text-lg font-semibold text-foreground">{chatbot?.title}</h1>
+                            <p className="text-sm text-muted-foreground">{chatbot?.domain}</p>
+                        </div>
+                    </div>
+                    <div className="ml-auto flex items-center gap-2">
+                        {chatbot?.published && publicUrl && (
+                            <Button variant="outline" size="sm" asChild>
+                                <a href={publicUrl} target="_blank" rel="noopener noreferrer">
+                                    <Share2 className="w-4 h-4 mr-2" />
+                                    View Public
+                                </a>
+                            </Button>
+                        )}
+                        <Link href={`/chat?chatbotId=${chatbot?.namespace}`}>
+                            <Button size="sm">
+                                Test Chat
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
             </header>
 
-            <main className="max-w-5xl mx-auto py-8 px-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {/* Left Column: Chatbot Info & Publishing */}
-                    <div className="md:col-span-1 space-y-6">
+            <main className="max-w-7xl mx-auto py-8 px-4">
+                <Tabs defaultValue="overview" className="space-y-6">
+                    <TabsList className="grid w-full grid-cols-4">
+                        <TabsTrigger value="overview">Overview</TabsTrigger>
+                        <TabsTrigger value="training">Training Data</TabsTrigger>
+                        <TabsTrigger value="publish">Publishing</TabsTrigger>
+                        <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="overview" className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Pages Crawled</CardTitle>
+                                    <Globe className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{chatbot?.pagesCrawled || 0}</div>
+                                    <p className="text-xs text-muted-foreground">From website analysis</p>
+                                </CardContent>
+                            </Card>
+                            
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Documents Stored</CardTitle>
+                                    <Database className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="text-2xl font-bold">{chatbot?.documentsStored || 0}</div>
+                                    <p className="text-xs text-muted-foreground">In vector database</p>
+                                </CardContent>
+                            </Card>
+                            
+                            <Card>
+                                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                                    <CardTitle className="text-sm font-medium">Status</CardTitle>
+                                    <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant={chatbot?.published ? "default" : "secondary"}>
+                                            {chatbot?.published ? "Published" : "Draft"}
+                                        </Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        {chatbot?.published ? "Publicly accessible" : "Private only"}
+                                    </p>
+                                </CardContent>
+                            </Card>
+                        </div>
+
                         <Card>
                             <CardHeader>
-                                <CardTitle className="flex items-center gap-2">
-                                    <Globe className="w-5 h-5 text-primary" />
-                                    Chatbot Details
-                                </CardTitle>
-                                <CardDescription>Information about your chatbot.</CardDescription>
+                                <CardTitle>Chatbot Information</CardTitle>
+                                <CardDescription>Details about your AI assistant</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-2">
-                                <p className="text-sm font-medium">Name: <span className="font-normal text-muted-foreground">{chatbot.name}</span></p>
-                                <p className="text-sm font-medium">URL: <span className="font-normal text-muted-foreground truncate">{chatbot.url}</span></p>
-                                <p className="text-sm font-medium">Namespace: <span className="font-normal text-muted-foreground">{chatbot.namespace}</span></p>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-sm font-medium">Company Name</label>
+                                        <p className="text-sm text-muted-foreground">{chatbot?.companyName}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Domain</label>
+                                        <p className="text-sm text-muted-foreground">{chatbot?.domain}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Industry</label>
+                                        <p className="text-sm text-muted-foreground capitalize">{chatbot?.industry}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Created</label>
+                                        <p className="text-sm text-muted-foreground">
+                                            {chatbot?.createdAt ? new Date(chatbot.createdAt).toLocaleDateString() : 'Unknown'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-sm font-medium">Description</label>
+                                    <p className="text-sm text-muted-foreground">{chatbot?.description}</p>
+                                </div>
                             </CardContent>
                         </Card>
+                    </TabsContent>
 
+                    <TabsContent value="training" className="space-y-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Add Text Content */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Type className="w-5 h-5 text-primary" />
+                                        Add Text Content
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Add raw text content to train your chatbot
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <label className="text-sm font-medium">Title (Optional)</label>
+                                        <Input
+                                            value={textTitle}
+                                            onChange={(e) => setTextTitle(e.target.value)}
+                                            placeholder="e.g., Company Policies, FAQ, Product Info"
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-medium">Content</label>
+                                        <Textarea
+                                            value={textInput}
+                                            onChange={(e) => setTextInput(e.target.value)}
+                                            placeholder="Paste your text content here..."
+                                            rows={8}
+                                            className="mt-1"
+                                        />
+                                    </div>
+                                    <Button 
+                                        onClick={handleTextSubmit} 
+                                        disabled={!textInput.trim() || isSubmitting}
+                                        className="w-full"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                Adding Content...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Plus className="w-4 h-4 mr-2" />
+                                                Add Text Content
+                                            </>
+                                        )}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+
+                            {/* Upload File */}
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <Upload className="w-5 h-5 text-primary" />
+                                        Upload File
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Upload PDF or TXT files to train your chatbot
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <label className="text-sm font-medium">Select File</label>
+                                        <Input
+                                            id="file-upload"
+                                            type="file"
+                                            onChange={handleFileChange}
+                                            accept=".pdf,.txt"
+                                            className="mt-1"
+                                        />
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            Supported formats: PDF, TXT (Max 10MB)
+                                        </p>
+                                    </div>
+                                    
+                                    {fileInput && (
+                                        <div className="p-3 bg-muted rounded-lg">
+                                            <div className="flex items-center gap-2">
+                                                <File className="w-4 h-4 text-muted-foreground" />
+                                                <span className="text-sm font-medium">{fileInput.name}</span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                Size: {(fileInput.size / 1024 / 1024).toFixed(2)} MB
+                                            </p>
+                                        </div>
+                                    )}
+                                    
+                                    <Button 
+                                        onClick={handleFileSubmit} 
+                                        disabled={!fileInput || isSubmitting}
+                                        className="w-full"
+                                    >
+                                        {isSubmitting ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                Uploading File...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload className="w-4 h-4 mr-2" />
+                                                Upload File
+                                            </>
+                                        )}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* Training History */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Training History</CardTitle>
+                                <CardDescription>
+                                    Recent training data additions
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {trainingLogs.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {trainingLogs.map((log) => (
+                                            <div key={log.$id} className="flex items-center justify-between p-3 border rounded-lg">
+                                                <div className="flex items-center gap-3">
+                                                    {log.contentType === 'pdf' ? (
+                                                        <File className="w-4 h-4 text-red-500" />
+                                                    ) : (
+                                                        <Type className="w-4 h-4 text-blue-500" />
+                                                    )}
+                                                    <div>
+                                                        <p className="font-medium">{log.title}</p>
+                                                        {log.fileName && (
+                                                            <p className="text-sm text-muted-foreground">{log.fileName}</p>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-sm font-medium">{log.chunksAdded} chunks</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {new Date(log.addedAt).toLocaleDateString()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                                        <p className="text-muted-foreground">No training data added yet</p>
+                                        <p className="text-sm text-muted-foreground">Add text or upload files to enhance your chatbot</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    <TabsContent value="publish" className="space-y-6">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <Share2 className="w-5 h-5 text-primary" />
-                                    Publish & Share
+                                    Publishing Settings
                                 </CardTitle>
-                                <CardDescription>Share your chatbot with a public link.</CardDescription>
+                                <CardDescription>
+                                    Make your chatbot publicly accessible
+                                </CardDescription>
                             </CardHeader>
-                            <CardContent>
-                                {chatbot.published && publicUrl ? (
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-2 p-2 border rounded-md bg-input">
-                                            <input type="text" readOnly value={publicUrl} className="flex-1 bg-transparent text-sm truncate" />
-                                            <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(publicUrl)}>Copy</Button>
-                                        </div>
-                                        <Button className="w-full" onClick={() => handlePublish(false)} disabled={isPublishing}>
-                                            {isPublishing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Unpublish'}
+                            <CardContent className="space-y-6">
+                                <div className="flex items-center justify-between p-4 border rounded-lg">
+                                    <div>
+                                        <h3 className="font-medium">Public Access</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            {chatbot?.published 
+                                                ? "Your chatbot is publicly accessible" 
+                                                : "Your chatbot is private"
+                                            }
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant={chatbot?.published ? "default" : "secondary"}>
+                                            {chatbot?.published ? "Published" : "Draft"}
+                                        </Badge>
+                                        <Button
+                                            onClick={() => handlePublish(!chatbot?.published)}
+                                            disabled={isPublishing}
+                                            variant={chatbot?.published ? "destructive" : "default"}
+                                        >
+                                            {isPublishing ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                chatbot?.published ? "Unpublish" : "Publish"
+                                            )}
                                         </Button>
                                     </div>
-                                ) : (
-                                    <Button className="w-full" onClick={() => handlePublish(true)} disabled={isPublishing}>
-                                        {isPublishing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Publish'}
-                                    </Button>
+                                </div>
+
+                                {chatbot?.published && publicUrl && (
+                                    <div className="space-y-3">
+                                        <Separator />
+                                        <div>
+                                            <label className="text-sm font-medium">Public URL</label>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <Input
+                                                    value={publicUrl}
+                                                    readOnly
+                                                    className="font-mono text-sm"
+                                                />
+                                                <Button
+                                                    variant="outline"
+                                                    onClick={() => navigator.clipboard.writeText(publicUrl)}
+                                                >
+                                                    Copy
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    asChild
+                                                >
+                                                    <a href={publicUrl} target="_blank" rel="noopener noreferrer">
+                                                        <Share2 className="w-4 h-4" />
+                                                    </a>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="p-4 bg-muted rounded-lg">
+                                            <h4 className="font-medium mb-2">Share Your Chatbot</h4>
+                                            <p className="text-sm text-muted-foreground mb-3">
+                                                Users can access your chatbot at the public URL above. 
+                                                The chatbot will respond as {chatbot?.companyName} and provide 
+                                                information based on your website content and training data.
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button variant="outline" size="sm" asChild>
+                                                    <a 
+                                                        href={`https://twitter.com/intent/tweet?text=Check out our AI assistant: ${publicUrl}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        Share on Twitter
+                                                    </a>
+                                                </Button>
+                                                <Button variant="outline" size="sm" asChild>
+                                                    <a 
+                                                        href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicUrl)}`}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        Share on LinkedIn
+                                                    </a>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
                             </CardContent>
                         </Card>
-                    </div>
+                    </TabsContent>
 
-                    {/* Right Column: Data Sources */}
-                    <div className="md:col-span-2 space-y-6">
+                    <TabsContent value="analytics" className="space-y-6">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
-                                    <Database className="w-5 h-5 text-primary" />
-                                    Data Sources
+                                    <BarChart3 className="w-5 h-5 text-primary" />
+                                    Analytics & Usage
                                 </CardTitle>
-                                <CardDescription>Add more data to refine your chatbot.</CardDescription>
+                                <CardDescription>
+                                    Monitor your chatbot's performance and usage
+                                </CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div>
-                                    <h4 className="font-semibold mb-2 flex items-center gap-2"><FileText className="w-4 h-4" /> Add Text Content</h4>
-                                    <textarea
-                                        placeholder="Paste raw text here..."
-                                        className="w-full p-2 border rounded-md bg-input"
-                                        rows={5}
-                                        value={textInput}
-                                        onChange={(e) => setTextInput(e.target.value)}
-                                        disabled={isSubmitting}
-                                    />
-                                    <Button size="sm" className="mt-2" onClick={handleTextSubmit} disabled={isSubmitting || !textInput.trim()}>
-                                        {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Text'}
-                                    </Button>
-                                </div>
-                                <div>
-                                    <h4 className="font-semibold mb-2 flex items-center gap-2"><Upload className="w-4 h-4" /> Upload Files</h4>
-                                    <div className="border-2 border-dashed rounded-md p-6 text-center bg-input">
-                                        <Input
-                                            type="file"
-                                            onChange={handleFileChange}
-                                            className="hidden"
-                                            id="file-upload"
-                                            disabled={isSubmitting}
-                                        />
-                                        <label htmlFor="file-upload" className="cursor-pointer">
-                                            <p className="text-muted-foreground">{fileInput ? fileInput.name : 'Drag & drop files here, or click to select'}</p>
-                                        </label>
-                                        <Button size="sm" className="mt-2" onClick={handleFileSubmit} disabled={isSubmitting || !fileInput}>
-                                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Upload File'}
-                                        </Button>
-                                    </div>
+                            <CardContent>
+                                <div className="text-center py-8">
+                                    <BarChart3 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                                    <p className="text-muted-foreground">Analytics Coming Soon</p>
+                                    <p className="text-sm text-muted-foreground">
+                                        Track conversations, user engagement, and performance metrics
+                                    </p>
                                 </div>
                             </CardContent>
                         </Card>
-                    </div>
-                </div>
+                    </TabsContent>
+                </Tabs>
             </main>
         </div>
     )
