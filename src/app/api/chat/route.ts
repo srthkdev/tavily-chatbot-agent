@@ -5,7 +5,7 @@ import { checkRateLimit } from '@/lib/rate-limit'
 import { serverConfig } from '@/config/tavily.config'
 import { Client, Account } from 'node-appwrite'
 import { cookies } from 'next/headers'
-import { processQueryStream } from '@/lib/langgraph-agent'
+import { processQuery } from '@/lib/langgraph-agent'
 
 // Helper to get user ID from session
 async function getUserId() {
@@ -67,59 +67,48 @@ export async function POST(request: NextRequest) {
             }
         })
 
-        // Create a readable stream for Server-Sent Events
-        const stream = new ReadableStream({
-            start(controller) {
-                const encoder = new TextEncoder()
-                
-                // Process query using the LangGraph agent
-                processQueryStream({
-                    messages: langchainMessages,
-                    query: lastMessage.content,
-                    userId: userId || undefined,
-                    chatbotId: chatbotId || undefined,
-                    namespace: namespace || undefined,
-                    onUpdate: (update) => {
-                        try {
-                            const data = JSON.stringify(update) + '\n'
-                            controller.enqueue(encoder.encode(`data: ${data}\n\n`))
-                        } catch (error) {
-                            console.error('Stream encoding error:', error)
-                        }
-                    },
-                }).then(() => {
-                    // Send completion signal
-                    controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-                    controller.close()
-                }).catch((error) => {
-                    console.error('Agent processing error:', error)
-                    // Send error response
-                    const errorUpdate = {
-                        type: 'complete',
-                        data: {
-                            response: 'I apologize, but I encountered an error while processing your request.',
-                            sources: [],
-                            isCompanySpecific: false,
-                        }
-                    }
-                    const data = JSON.stringify(errorUpdate) + '\n'
-                    controller.enqueue(encoder.encode(`data: ${data}\n\n`))
-                    controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-                    controller.close()
-                })
+        // Process query using the LangGraph agent to get the response
+        const result = await processQuery({
+            messages: langchainMessages,
+            query: lastMessage.content,
+            userId: userId || undefined,
+            chatbotId: chatbotId || undefined,
+            namespace: namespace || undefined,
+        })
+
+        // Check if AI model is available
+        if (!serverConfig.ai.model) {
+            throw new Error('No AI model configured')
+        }
+
+        // Use streamText to create a proper AI SDK compatible stream
+        const stream = await streamText({
+            model: serverConfig.ai.model,
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are an AI assistant. Please respond with exactly the following text, word for word:'
+                },
+                {
+                    role: 'user', 
+                    content: result.response
+                }
+            ],
+        })
+
+        // Create response with sources in headers (encode to handle Unicode characters)
+        const sourcesJson = JSON.stringify(result.sources)
+        const sourcesBase64 = Buffer.from(sourcesJson, 'utf8').toString('base64')
+        
+        const response = stream.toDataStreamResponse({
+            headers: {
+                'x-sources': sourcesBase64,
+                'x-sources-encoding': 'base64',
+                'x-company-specific': result.isCompanySpecific.toString(),
             }
         })
 
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            }
-        })
+        return response
 
     } catch (error) {
         console.error('Chat API error:', error)

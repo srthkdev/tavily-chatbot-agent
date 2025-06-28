@@ -22,7 +22,7 @@ export async function GET() {
     ai: environmentStatus.OPENAI_API_KEY || environmentStatus.ANTHROPIC_API_KEY || 
         environmentStatus.GOOGLE_API_KEY || environmentStatus.GROQ_API_KEY,
     search: environmentStatus.TAVILY_API_KEY,
-    memory: environmentStatus.MEM0_API_KEY,
+    memory: environmentStatus.MEM0_API_KEY, // Using official mem0ai library
     storage: environmentStatus.UPSTASH_REDIS_REST_URL && environmentStatus.UPSTASH_REDIS_REST_TOKEN,
     vectorDB: environmentStatus.UPSTASH_SEARCH_REST_URL && environmentStatus.UPSTASH_SEARCH_REST_TOKEN,
     appwrite: environmentStatus.NEXT_PUBLIC_APPWRITE_ENDPOINT && environmentStatus.NEXT_PUBLIC_APPWRITE_PROJECT_ID,
@@ -36,7 +36,7 @@ export async function GET() {
       !features.search && 'Tavily API key not configured - search functionality will be limited',
       !features.ai && 'No AI provider configured - please set at least one API key',
       !features.vectorDB && 'Upstash Vector DB not configured - chatbot creation will fail',
-      !features.memory && 'Mem0 not configured - memory features disabled',
+      !features.memory && 'Mem0 not configured - conversation memory features disabled',
       !features.storage && 'Redis not configured - using localStorage only',
       !features.appwrite && 'Appwrite not configured - authentication disabled',
     ].filter(Boolean),

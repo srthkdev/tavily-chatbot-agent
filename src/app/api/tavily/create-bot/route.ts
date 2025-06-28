@@ -251,20 +251,29 @@ export async function POST(request: NextRequest) {
         clientConfig.appwrite.collections.chatbots,
         ID.unique(),
         {
+          // Required fields according to schema
+          userId: user.$id,
           namespace,
-          url,
+          name: companyMetadata.name,
+          status: 'active',
+          pagesCrawled: chatbotData.pagesCrawled.toString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          
+          // Optional fields
+          description: companyMetadata.description || '',
+          url: url || '',
+          favicon: null,
+          
+          // Additional fields for functionality (not in schema but used by app)
           title: companyMetadata.name,
-          description: companyMetadata.description,
           companyName: companyMetadata.name,
           domain: companyMetadata.domain,
           industry: companyMetadata.industry,
-          pagesCrawled: chatbotData.pagesCrawled,
           documentsStored: documents.length,
-          userId: user.$id, // Correct field name
           createdBy: user.$id,
-          createdAt: new Date().toISOString(),
           isActive: true,
-          published: false, // Default to unpublished
+          published: false,
           publicUrl: null,
           metadata: JSON.stringify(enhancedChatbotData.metadata),
         }

@@ -6,7 +6,7 @@ import { Query } from 'node-appwrite'
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Check authentication
@@ -34,7 +34,8 @@ export async function PUT(
       )
     }
 
-    const chatbotId = params.id
+    const resolvedParams = await params
+    const chatbotId = resolvedParams.id
 
     // Parse request body
     let body

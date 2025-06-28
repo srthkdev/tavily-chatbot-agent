@@ -170,7 +170,7 @@ For general conversations (not company-specific), respond as a helpful AI assist
   features: {
     enableCreation: process.env.DISABLE_CHATBOT_CREATION !== 'true',
     enableAppwrite: !!(process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT && process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID),
-    enableMem0: !!process.env.MEM0_API_KEY,
+    enableMem0: !!process.env.MEM0_API_KEY, // Now using official mem0ai library
     enableRedis: !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
     enableSearch: !!(process.env.UPSTASH_SEARCH_REST_URL && process.env.UPSTASH_SEARCH_REST_TOKEN),
   },

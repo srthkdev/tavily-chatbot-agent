@@ -45,7 +45,7 @@ function chunkText(text: string, maxChunkSize: number = 1000): string[] {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Check authentication
@@ -73,7 +73,8 @@ export async function POST(
       )
     }
 
-    const chatbotId = params.id
+    const resolvedParams = await params
+    const chatbotId = resolvedParams.id
 
     // Get chatbot to verify ownership
     let chatbot
@@ -264,7 +265,7 @@ export async function POST(
 // GET endpoint to retrieve training data logs
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Check authentication
@@ -292,7 +293,8 @@ export async function GET(
       )
     }
 
-    const chatbotId = params.id
+    const resolvedParams = await params
+    const chatbotId = resolvedParams.id
 
     // Get chatbot to verify ownership
     let chatbot

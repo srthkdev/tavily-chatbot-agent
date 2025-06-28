@@ -1,5 +1,4 @@
-// Note: This is a simplified version due to type compatibility issues with mem0ai package
-// In a production environment, you would want to use the official Mem0 SDK once types are stable
+import MemoryClient from 'mem0ai'
 
 export interface MemoryMessage {
   role: 'user' | 'assistant'
@@ -25,18 +24,15 @@ export interface MemorySearchResult {
   score: number
 }
 
-// Initialize Mem0 client using fetch API directly
-function getMem0Headers() {
+// Initialize Mem0 client
+function getMem0Client() {
   const apiKey = process.env.MEM0_API_KEY
   
   if (!apiKey) {
     throw new Error('MEM0_API_KEY environment variable is required')
   }
   
-  return {
-    'Authorization': `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
-  }
+  return new MemoryClient({ apiKey })
 }
 
 // Add memories to the system
@@ -45,30 +41,25 @@ export async function addMemories(
   options: MemoryOptions
 ): Promise<{ success: boolean; memories: unknown[] }> {
   try {
-    const response = await fetch('https://api.mem0.ai/v1/memories', {
-      method: 'POST',
-      headers: getMem0Headers(),
-      body: JSON.stringify({
-        messages,
-        user_id: options.user_id,
-        agent_id: options.agent_id,
-        run_id: options.run_id,
-      }),
+    const client = getMem0Client()
+    
+    const result = await client.add(messages, {
+      user_id: options.user_id,
+      agent_id: options.agent_id,
+      run_id: options.run_id,
     })
-    
-    if (!response.ok) {
-      console.warn(`Mem0 add memories failed with status: ${response.status}`)
-      return { success: false, memories: [] }
-    }
-    
-    const result = await response.json()
     
     return {
       success: true,
-      memories: result.results || [],
+      memories: result || [],
     }
   } catch (error) {
     console.error('Mem0 add memories error:', error)
+    if (error instanceof Error && error.message.includes('401')) {
+      console.warn('⚠️  Mem0 request returned 401 (unauthorized). Please verify that MEM0_API_KEY is set correctly.')
+      console.warn('⚠️  API Key present:', !!process.env.MEM0_API_KEY)
+      console.warn('⚠️  API Key prefix:', process.env.MEM0_API_KEY?.substring(0, 10) + '...')
+    }
     return { success: false, memories: [] }
   }
 }
@@ -80,42 +71,28 @@ export async function searchMemories(
   limit = 10
 ): Promise<MemorySearchResult[]> {
   try {
-    const searchParams = new URLSearchParams({
-      query,
+    const client = getMem0Client()
+    
+    const result = await client.search(query, {
       user_id: options.user_id,
-      limit: limit.toString(),
+      agent_id: options.agent_id,
+      run_id: options.run_id,
+      limit,
     })
     
-    if (options.agent_id) {
-      searchParams.append('agent_id', options.agent_id)
-    }
-    
-    if (options.run_id) {
-      searchParams.append('run_id', options.run_id)
-    }
-    
-    const response = await fetch(`https://api.mem0.ai/v1/memories/search?${searchParams}`, {
-      headers: getMem0Headers(),
-    })
-    
-    // Gracefully handle authentication or other HTTP errors without throwing so that
-    // the calling code can continue operating even when Mem0 is mis-configured or
-    // temporarily unavailable.
-    if (!response.ok) {
-      if (response.status === 401) {
-        console.warn('⚠️  Mem0 request returned 401 (unauthorized). Please verify that MEM0_API_KEY is set correctly.')
-        console.warn('⚠️  API Key present:', !!process.env.MEM0_API_KEY)
-        console.warn('⚠️  API Key prefix:', process.env.MEM0_API_KEY?.substring(0, 10) + '...')
-      } else {
-        console.warn(`⚠️  Mem0 search failed with status: ${response.status}`)
-      }
-      return []
-    }
-    
-    const result = await response.json()
-    return result.results || []
+    // Transform the result to match our interface
+    return (result || []).map((item: any) => ({
+      id: item.id,
+      memory: item.memory || item.text || '',
+      score: item.score || 0,
+    }))
   } catch (error) {
     console.error('Mem0 search memories error:', error)
+    if (error instanceof Error && error.message.includes('401')) {
+      console.warn('⚠️  Mem0 request returned 401 (unauthorized). Please verify that MEM0_API_KEY is set correctly.')
+      console.warn('⚠️  API Key present:', !!process.env.MEM0_API_KEY)
+      console.warn('⚠️  API Key prefix:', process.env.MEM0_API_KEY?.substring(0, 10) + '...')
+    }
     return []
   }
 }
@@ -126,36 +103,27 @@ export async function getUserMemories(
   limit = 50
 ): Promise<Memory[]> {
   try {
-    const searchParams = new URLSearchParams({
+    const client = getMem0Client()
+    
+    const result = await client.getAll({
       user_id: options.user_id,
-      limit: limit.toString(),
+      agent_id: options.agent_id,
+      run_id: options.run_id,
+      limit,
     })
     
-    if (options.agent_id) {
-      searchParams.append('agent_id', options.agent_id)
-    }
-    
-    if (options.run_id) {
-      searchParams.append('run_id', options.run_id)
-    }
-    
-    const response = await fetch(`https://api.mem0.ai/v1/memories?${searchParams}`, {
-      headers: getMem0Headers(),
-    })
-    
-    if (!response.ok) {
-      if (response.status === 401) {
-        console.warn('⚠️  Mem0 request returned 401 (unauthorized) while fetching user memories.')
-      } else {
-        console.warn(`⚠️  Mem0 get memories failed with status: ${response.status}`)
-      }
-      return []
-    }
-    
-    const result = await response.json()
-    return result.results || []
+    // Transform the result to match our interface
+    return (result || []).map((item: any) => ({
+      id: item.id,
+      memory: item.memory || item.text || '',
+      created_at: item.created_at || new Date().toISOString(),
+      updated_at: item.updated_at || new Date().toISOString(),
+    }))
   } catch (error) {
     console.error('Mem0 get memories error:', error)
+    if (error instanceof Error && error.message.includes('401')) {
+      console.warn('⚠️  Mem0 request returned 401 (unauthorized) while fetching user memories.')
+    }
     return []
   }
 }
@@ -165,15 +133,9 @@ export async function deleteMemory(
   memoryId: string
 ): Promise<{ success: boolean }> {
   try {
-    const response = await fetch(`https://api.mem0.ai/v1/memories/${memoryId}`, {
-      method: 'DELETE',
-      headers: getMem0Headers(),
-    })
+    const client = getMem0Client()
     
-    if (!response.ok) {
-      console.warn(`Mem0 delete memory failed with status: ${response.status}`)
-      return { success: false }
-    }
+    await client.delete(memoryId)
     
     return { success: true }
   } catch (error) {

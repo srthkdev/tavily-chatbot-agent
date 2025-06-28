@@ -5,10 +5,11 @@ import { Query } from 'node-appwrite'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const chatbotId = params.id
+    const resolvedParams = await params
+    const chatbotId = resolvedParams.id
 
     if (!chatbotId) {
       return NextResponse.json(

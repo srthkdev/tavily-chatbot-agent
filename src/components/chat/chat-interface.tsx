@@ -31,9 +31,18 @@ export function ChatInterface({ chatbotId, namespace, useWebSearch = false, maxR
     onResponse: async (response) => {
       // Handle sources from response headers
       const sourcesHeader = response.headers.get('x-sources')
+      const sourcesEncoding = response.headers.get('x-sources-encoding')
+      
       if (sourcesHeader) {
         try {
-          const sources = JSON.parse(sourcesHeader)
+          let sourcesData = sourcesHeader
+          
+          // Decode base64 if needed
+          if (sourcesEncoding === 'base64') {
+            sourcesData = atob(sourcesHeader)
+          }
+          
+          const sources = JSON.parse(sourcesData)
           if (sources && sources.length > 0) {
             // Wait a bit for the message to be added to the messages array
             setTimeout(() => {

@@ -6,10 +6,11 @@ import { clientConfig } from '@/config/tavily.config'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const chatbotId = params.id
+    const resolvedParams = await params
+    const chatbotId = resolvedParams.id
 
     // Check authentication
     const cookieStore = await cookies()
@@ -36,26 +37,50 @@ export async function GET(
       )
     }
 
-    // Get chatbot by namespace and verify ownership
+    // Get chatbot by ID (document ID) or namespace and verify ownership
     try {
-      const response = await databases.listDocuments(
-        clientConfig.appwrite.databaseId,
-        clientConfig.appwrite.collections.chatbots,
-        [
-          Query.equal('namespace', [chatbotId]),
-          Query.equal('userId', [user.$id]),
-          Query.limit(1)
-        ]
-      )
+      let chatbot = null
       
-      if (response.documents.length === 0) {
+      // First try to get by document ID
+      try {
+        const directResponse = await databases.getDocument(
+          clientConfig.appwrite.databaseId,
+          clientConfig.appwrite.collections.chatbots,
+          chatbotId
+        )
+        
+        // Verify ownership
+        if (directResponse.userId === user.$id) {
+          chatbot = directResponse
+        }
+      } catch (error) {
+        // If direct ID lookup fails, try namespace lookup
+        console.log('Direct ID lookup failed, trying namespace lookup')
+      }
+      
+      // If direct lookup failed or didn't match user, try namespace lookup
+      if (!chatbot) {
+        const response = await databases.listDocuments(
+          clientConfig.appwrite.databaseId,
+          clientConfig.appwrite.collections.chatbots,
+          [
+            Query.equal('namespace', [chatbotId]),
+            Query.equal('userId', [user.$id]),
+            Query.limit(1)
+          ]
+        )
+        
+        if (response.documents.length > 0) {
+          chatbot = response.documents[0]
+        }
+      }
+      
+      if (!chatbot) {
         return NextResponse.json(
           { error: 'Chatbot not found or access denied' },
           { status: 404 }
         )
       }
-      
-      const chatbot = response.documents[0]
 
       return NextResponse.json({
         success: true,
@@ -81,10 +106,11 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const chatbotId = params.id
+    const resolvedParams = await params
+    const chatbotId = resolvedParams.id
     let updateData
     
     try {
@@ -123,24 +149,48 @@ export async function PUT(
 
     // Get chatbot to verify ownership
     try {
-      const response = await databases.listDocuments(
-        clientConfig.appwrite.databaseId,
-        clientConfig.appwrite.collections.chatbots,
-        [
-          Query.equal('namespace', [chatbotId]),
-          Query.equal('userId', [user.$id]),
-          Query.limit(1)
-        ]
-      )
+      let chatbot = null
       
-      if (response.documents.length === 0) {
+      // First try to get by document ID
+      try {
+        const directResponse = await databases.getDocument(
+          clientConfig.appwrite.databaseId,
+          clientConfig.appwrite.collections.chatbots,
+          chatbotId
+        )
+        
+        // Verify ownership
+        if (directResponse.userId === user.$id) {
+          chatbot = directResponse
+        }
+      } catch (error) {
+        // If direct ID lookup fails, try namespace lookup
+        console.log('Direct ID lookup failed, trying namespace lookup')
+      }
+      
+      // If direct lookup failed or didn't match user, try namespace lookup
+      if (!chatbot) {
+        const response = await databases.listDocuments(
+          clientConfig.appwrite.databaseId,
+          clientConfig.appwrite.collections.chatbots,
+          [
+            Query.equal('namespace', [chatbotId]),
+            Query.equal('userId', [user.$id]),
+            Query.limit(1)
+          ]
+        )
+        
+        if (response.documents.length > 0) {
+          chatbot = response.documents[0]
+        }
+      }
+      
+      if (!chatbot) {
         return NextResponse.json(
           { error: 'Chatbot not found or access denied' },
           { status: 404 }
         )
       }
-      
-      const chatbot = response.documents[0]
 
       // Update chatbot with allowed fields
       const allowedUpdates: any = {
@@ -182,10 +232,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const chatbotId = params.id
+    const resolvedParams = await params
+    const chatbotId = resolvedParams.id
 
     // Check authentication
     const cookieStore = await cookies()
@@ -214,24 +265,48 @@ export async function DELETE(
 
     // Get chatbot to verify ownership
     try {
-      const response = await databases.listDocuments(
-        clientConfig.appwrite.databaseId,
-        clientConfig.appwrite.collections.chatbots,
-        [
-          Query.equal('namespace', [chatbotId]),
-          Query.equal('userId', [user.$id]),
-          Query.limit(1)
-        ]
-      )
+      let chatbot = null
       
-      if (response.documents.length === 0) {
+      // First try to get by document ID
+      try {
+        const directResponse = await databases.getDocument(
+          clientConfig.appwrite.databaseId,
+          clientConfig.appwrite.collections.chatbots,
+          chatbotId
+        )
+        
+        // Verify ownership
+        if (directResponse.userId === user.$id) {
+          chatbot = directResponse
+        }
+      } catch (error) {
+        // If direct ID lookup fails, try namespace lookup
+        console.log('Direct ID lookup failed, trying namespace lookup')
+      }
+      
+      // If direct lookup failed or didn't match user, try namespace lookup
+      if (!chatbot) {
+        const response = await databases.listDocuments(
+          clientConfig.appwrite.databaseId,
+          clientConfig.appwrite.collections.chatbots,
+          [
+            Query.equal('namespace', [chatbotId]),
+            Query.equal('userId', [user.$id]),
+            Query.limit(1)
+          ]
+        )
+        
+        if (response.documents.length > 0) {
+          chatbot = response.documents[0]
+        }
+      }
+      
+      if (!chatbot) {
         return NextResponse.json(
           { error: 'Chatbot not found or access denied' },
           { status: 404 }
         )
       }
-      
-      const chatbot = response.documents[0]
 
       // Delete the chatbot
       await databases.deleteDocument(
