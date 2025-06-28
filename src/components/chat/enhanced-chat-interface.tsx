@@ -70,6 +70,35 @@ export function EnhancedChatInterface({
     }
   }, [initialMessage])
 
+  // Load chat history when component mounts
+  useEffect(() => {
+    const loadChatHistory = async () => {
+      if (!chatbotId) return
+
+      try {
+        const response = await fetch(`/api/chat/history?chatbotId=${chatbotId}&limit=50`)
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success && result.data.messages.length > 0) {
+            const historyMessages: Message[] = result.data.messages.map((msg: any) => ({
+              id: msg.$id || Date.now().toString(),
+              role: msg.role,
+              content: msg.content,
+              sources: msg.sources || [],
+              timestamp: new Date(msg.timestamp),
+              isCompanySpecific: msg.isCompanySpecific,
+            }))
+            setMessages(historyMessages)
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load chat history:', error)
+      }
+    }
+
+    loadChatHistory()
+  }, [chatbotId])
+
   const handleSend = async (messageContent?: string) => {
     const content = messageContent || input.trim()
     if (!content || isLoading) return
@@ -225,31 +254,39 @@ export function EnhancedChatInterface({
     <div className={`flex flex-col h-full ${className}`}>
       {/* Header */}
       {companyInfo && (
-        <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4">
+        <div className="border-b bg-gradient-to-r from-primary/5 to-primary/10 backdrop-blur supports-[backdrop-filter]:bg-background/60 p-4">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10">
-              <Building className="w-5 h-5 text-primary" />
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/15 border border-primary/20">
+              <Building className="w-6 h-6 text-primary" />
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-lg">{companyInfo.name}</h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <h3 className="font-bold text-xl text-foreground">{companyInfo.name}</h3>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
                 <Globe className="w-3 h-3" />
-                <span>{companyInfo.domain}</span>
+                <span className="font-medium">{companyInfo.domain}</span>
                 {companyInfo.industry && (
                   <>
                     <span>•</span>
-                    <Badge variant="secondary" className="text-xs">
+                    <Badge variant="outline" className="text-xs bg-primary/10 border-primary/20">
                       {companyInfo.industry}
                     </Badge>
                   </>
                 )}
               </div>
             </div>
+            <div className="text-right">
+              <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                <CheckCircle className="w-3 h-3 mr-1" />
+                Company Assistant
+              </Badge>
+            </div>
           </div>
           {companyInfo.description && (
-            <p className="text-sm text-muted-foreground mt-2">
-              {companyInfo.description}
-            </p>
+            <div className="mt-3 p-3 bg-background/50 rounded-lg border border-primary/10">
+              <p className="text-sm text-foreground/80 leading-relaxed">
+                {companyInfo.description}
+              </p>
+            </div>
           )}
         </div>
       )}

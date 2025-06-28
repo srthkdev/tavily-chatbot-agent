@@ -7,6 +7,7 @@ import { Client, Account } from 'node-appwrite'
 import { cookies } from 'next/headers'
 import { processQuery } from '@/lib/langgraph-agent'
 import { handleCompanyChatQuery } from '@/lib/company-research-agent'
+import { chatStorage } from '@/lib/chat-storage'
 
 // Helper to get user ID from session
 async function getUserId() {
@@ -82,9 +83,25 @@ export async function POST(request: NextRequest) {
                 
                 if (chatbotResponse.ok) {
                     const chatbotResult = await chatbotResponse.json()
-                    if (chatbotResult.success && chatbotResult.data?.type === 'company') {
-                        isCompanyBot = true
-                        companyData = chatbotResult.data.companyData
+                    if (chatbotResult.success && chatbotResult.data) {
+                        // Check if this is a company-specific chatbot (has company data or specific namespace pattern)
+                        const data = chatbotResult.data
+                        if (data.url && data.name && data.namespace) {
+                            isCompanyBot = true
+                            // Extract company info from chatbot data
+                            companyData = {
+                                name: data.name,
+                                url: data.url,
+                                description: data.description || `AI assistant for ${data.name}`,
+                                domain: data.url ? new URL(data.url).hostname : data.namespace.split('-')[0],
+                                // Map to CompanyInfo interface
+                                companyInfo: {
+                                    name: data.name,
+                                    domain: data.url ? new URL(data.url).hostname : data.namespace.split('-')[0],
+                                    description: data.description || `AI assistant for ${data.name}`,
+                                }
+                            }
+                        }
                     }
                 }
             } catch (error) {
@@ -92,61 +109,123 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        let result
+        // Create a streaming response
+        const encoder = new TextEncoder()
         
-        if (isCompanyBot && companyData) {
-            // Use company research agent for company chatbots
-            result = await handleCompanyChatQuery({
-                company: companyData.name,
-                companyUrl: companyData.url,
-                messages: langchainMessages,
-                userId: userId || undefined,
-                chatbotId: chatbotId || undefined,
-            })
-        } else {
-            // Use regular agent for standard chatbots
-            result = await processQuery({
-                messages: langchainMessages,
-                query: lastMessage.content,
-                userId: userId || undefined,
-                chatbotId: chatbotId || undefined,
-                namespace: namespace || undefined,
-            })
-        }
+        const stream = new ReadableStream({
+            async start(controller) {
+                try {
+                    const sendData = (data: any) => {
+                        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`))
+                    }
 
-        // Check if AI model is available
-        if (!serverConfig.ai.model) {
-            throw new Error('No AI model configured')
-        }
+                    let result
+                    
+                    if (isCompanyBot && companyData) {
+                        // Send initial status
+                        sendData({ type: 'status', data: `Connecting to ${companyData.name} knowledge base...` })
+                        
+                        // Use company research agent for company chatbots
+                        result = await handleCompanyChatQuery({
+                            company: companyData.name,
+                            companyUrl: companyData.url,
+                            messages: langchainMessages,
+                            userId: userId || undefined,
+                            chatbotId: chatbotId || undefined,
+                            namespace: namespace || undefined,
+                        })
+                        
+                        // Send sources if available
+                        if (result.sources && result.sources.length > 0) {
+                            sendData({ type: 'sources', data: result.sources })
+                        }
+                    } else {
+                        // Send initial status
+                        sendData({ type: 'status', data: 'Processing your request...' })
+                        
+                        // Use regular agent for standard chatbots
+                        result = await processQuery({
+                            messages: langchainMessages,
+                            query: lastMessage.content,
+                            userId: userId || undefined,
+                            chatbotId: chatbotId || undefined,
+                            namespace: namespace || undefined,
+                            companyInfo: companyData?.companyInfo || undefined,
+                        })
+                        
+                        // Send sources if available
+                        if (result.sources && result.sources.length > 0) {
+                            sendData({ type: 'sources', data: result.sources })
+                        }
+                    }
 
-        // Use streamText to create a proper AI SDK compatible stream
-        const stream = await streamText({
-            model: serverConfig.ai.model,
-            messages: [
-                {
-                    role: 'system',
-                    content: 'You are an AI assistant. Please respond with exactly the following text, word for word:'
-                },
-                {
-                    role: 'user', 
-                    content: result.response
+                    // Save messages to database if user is authenticated
+                    if (userId && chatbotId) {
+                        try {
+                            // Save user message
+                            await chatStorage.saveMessage({
+                                chatbotId,
+                                userId,
+                                role: 'user',
+                                content: lastMessage.content,
+                                isCompanySpecific: isCompanyBot,
+                            })
+
+                            // Save assistant response
+                            await chatStorage.saveMessage({
+                                chatbotId,
+                                userId,
+                                role: 'assistant',
+                                content: result.response,
+                                sources: result.sources || [],
+                                isCompanySpecific: isCompanyBot || ('isCompanySpecific' in result ? result.isCompanySpecific : false),
+                            })
+
+                            // Update or create session
+                            await chatStorage.saveSession({
+                                chatbotId,
+                                userId,
+                                title: lastMessage.content.substring(0, 50) + (lastMessage.content.length > 50 ? '...' : ''),
+                                lastMessage: result.response.substring(0, 100) + (result.response.length > 100 ? '...' : ''),
+                                messageCount: messages.length + 1,
+                            })
+                        } catch (error) {
+                            console.warn('Failed to save chat messages:', error)
+                        }
+                    }
+
+                    // Send the complete response
+                    sendData({
+                        type: 'complete',
+                        data: {
+                            response: result.response,
+                            sources: result.sources || [],
+                            isCompanySpecific: isCompanyBot || ('isCompanySpecific' in result ? result.isCompanySpecific : false)
+                        }
+                    })
+                    
+                    // End the stream
+                    controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+                    controller.close()
+                    
+                } catch (error) {
+                    console.error('Stream error:', error)
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                        type: 'error',
+                        data: error instanceof Error ? error.message : 'Unknown error'
+                    })}\n\n`))
+                    controller.close()
                 }
-            ],
-        })
-
-        // Create response with sources in headers (encode to handle Unicode characters)
-        const sourcesJson = JSON.stringify(result.sources)
-        const sourcesBase64 = Buffer.from(sourcesJson, 'utf8').toString('base64')
-        
-        const response = stream.toDataStreamResponse({
-            headers: {
-                'x-sources': sourcesBase64,
-                'x-sources-encoding': 'base64',
-                'x-company-specific': (isCompanyBot || ('isCompanySpecific' in result ? result.isCompanySpecific : false)).toString(),
             }
         })
 
-        return response
+        return new Response(stream, {
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+            }
+        })
 
     } catch (error) {
         console.error('Chat API error:', error)

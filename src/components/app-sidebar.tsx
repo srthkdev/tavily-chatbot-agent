@@ -3,24 +3,13 @@
 import * as React from "react"
 import {
   Building2,
-  FileText,
-  MessageSquare,
-  Settings2,
   Home,
-  Database,
-  LifeBuoy,
-  Send,
   Plus,
-  Search,
-  BarChart3,
-  Command,
+  Settings,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { useRouter, usePathname } from "next/navigation"
 
-import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
-import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
@@ -32,123 +21,42 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-const data = {
-  user: {
-    name: "User",
-    email: "user@example.com",
-    avatar: "/avatars/user.jpg",
-  },
-  navMain: [
-    {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: Home,
-      isActive: true,
-      items: [
-        {
-          title: "All Projects",
-          url: "/dashboard",
-        },
-        {
-          title: "Recent",
-          url: "/dashboard?filter=recent",
-        },
-        {
-          title: "Favorites",
-          url: "/dashboard?filter=favorites",
-        },
-      ],
-    },
-    {
-      title: "Create Project",
-      url: "/",
-      icon: Plus,
-      items: [
-        {
-          title: "Company Research",
-          url: "/",
-        },
-        {
-          title: "Website Chatbot",
-          url: "/create-website",
-        },
-      ],
-    },
-    {
-      title: "Research Tools",
-      url: "#",
-      icon: Search,
-      items: [
-        {
-          title: "Company Analysis",
-          url: "/tools/company-analysis",
-        },
-        {
-          title: "Market Research",
-          url: "/tools/market-research",
-        },
-        {
-          title: "Financial Data",
-          url: "/tools/financial-data",
-        },
-      ],
-    },
-    {
-      title: "Settings",
-      url: "/settings",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "/settings",
-        },
-        {
-          title: "API Keys",
-          url: "/settings/api-keys",
-        },
-        {
-          title: "Billing",
-          url: "/settings/billing",
-        },
-        {
-          title: "Team",
-          url: "/settings/team",
-        },
-      ],
-    },
-  ],
-  navSecondary: [
-    {
-      title: "Support",
-      url: "/support",
-      icon: LifeBuoy,
-    },
-    {
-      title: "Feedback",
-      url: "/feedback",
-      icon: Send,
-    },
-  ],
-  projects: [
-    {
-      name: "Apple Inc.",
-      url: "/project/apple-inc",
-      icon: Building2,
-    },
-    {
-      name: "Microsoft Corp.",
-      url: "/project/microsoft-corp",
-      icon: Building2,
-    },
-    {
-      name: "Google LLC",
-      url: "/project/google-llc",
-      icon: Building2,
-    },
-  ],
-}
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const [projects, setProjects] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(true)
+  const { isAuthenticated } = useAuth()
+
+  // Load projects from database
+  React.useEffect(() => {
+    const loadProjects = async () => {
+      if (!isAuthenticated) return
+      
+      try {
+        setLoading(true)
+        const response = await fetch('/api/projects')
+        if (response.ok) {
+          const result = await response.json()
+          if (result.success) {
+            // Transform projects to match expected format
+            const transformedProjects = result.data.map((project: any) => ({
+              id: project.$id,
+              name: project.name,
+              url: `/project/${project.$id}`,
+              icon: Building2,
+            }))
+            setProjects(transformedProjects)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load projects:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadProjects()
+  }, [isAuthenticated])
+
   return (
     <Sidebar
       className="border-r"
@@ -164,7 +72,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <Building2 className="size-4" />
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">Company Research AI</span>
+                    <span className="truncate font-medium">Walnut AI</span>
                     <span className="truncate text-xs text-muted-foreground">Business Intelligence</span>
                   </div>
                 </a>
@@ -175,15 +83,39 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent className="flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto px-3 py-2">
-          <NavMain items={data.navMain} />
-          <NavProjects projects={data.projects} />
-        </div>
-        <div className="px-3 py-2 border-t">
-          <NavSecondary items={data.navSecondary} />
+          <div className="mb-6 space-y-1">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a href="/dashboard" className="flex items-center gap-2">
+                    <Home className="size-4" />
+                    <span>Dashboard</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a href="/" className="flex items-center gap-2">
+                    <Plus className="size-4" />
+                    <span>Create Project</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <a href="/settings" className="flex items-center gap-2">
+                    <Settings className="size-4" />
+                    <span>Settings</span>
+                  </a>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
+          {!loading && <NavProjects projects={projects} />}
         </div>
       </SidebarContent>
       <SidebarFooter className="border-t px-3 py-2">
-        <NavUser user={data.user} />
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   )

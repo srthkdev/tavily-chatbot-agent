@@ -88,7 +88,7 @@ export default function ChatbotAdminPage() {
             } else {
                 setError('Failed to fetch chatbot data')
             }
-        } catch (e) {
+        } catch (error) {
             setError('An unexpected error occurred')
         } finally {
             setLoading(false)
@@ -134,7 +134,7 @@ export default function ChatbotAdminPage() {
             } else {
                 alert(result.error || 'Failed to add text content.')
             }
-        } catch (e) {
+        } catch (error) {
             alert('An error occurred while adding text content.')
         } finally {
             setIsSubmitting(false)
@@ -175,7 +175,7 @@ export default function ChatbotAdminPage() {
             } else {
                 alert(result.error || 'Failed to upload file.')
             }
-        } catch (e) {
+        } catch (error) {
             alert('An error occurred while uploading the file.')
         } finally {
             setIsSubmitting(false)
@@ -206,7 +206,7 @@ export default function ChatbotAdminPage() {
             } else {
                 alert(result.error || 'Failed to update chatbot status.')
             }
-        } catch(e) {
+        } catch(error) {
             alert('An error occurred while updating publish status.')
         } finally {
             setIsPublishing(false)
@@ -643,7 +643,7 @@ export default function ChatbotAdminPage() {
                                     Analytics & Usage
                                 </CardTitle>
                                 <CardDescription>
-                                    Monitor your chatbot's performance and usage
+                                    Monitor your chatbot&apos;s performance and usage
                                 </CardDescription>
                             </CardHeader>
                             <CardContent>

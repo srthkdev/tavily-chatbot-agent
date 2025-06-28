@@ -14,6 +14,7 @@ interface CompanyResearchState {
   hqLocation?: string
   userId?: string
   chatbotId?: string
+  namespace?: string
   
   // Research data
   siteData?: any
@@ -38,11 +39,13 @@ interface CompanyResearchState {
   briefings?: any
   report?: string
   references?: string[]
+  sources?: any[]
   
   // Chat state
   messages: BaseMessage[]
   memoryContext?: string
   searchResults?: TavilySearchResult[]
+  ragResults?: any[]
   isCompanyChat: boolean
   
   // Progress tracking
@@ -352,7 +355,7 @@ Make it professional, well-structured, and actionable.
     }
   }
 
-  // Chat Mode: Handle company-specific conversations
+  // Chat Mode: Handle company-specific conversations with enhanced search and RAG
   async companyChatStep(state: CompanyResearchState): Promise<CompanyResearchState> {
     const { messages, company, companyUrl, userId, chatbotId, memoryContext } = state
     
@@ -364,51 +367,104 @@ Make it professional, well-structured, and actionable.
 
       const userQuery = (lastMessage as HumanMessage).content as string
 
-      // Search for company-specific information
-      const companyQuery = `${userQuery} ${company} ${companyUrl ? `site:${companyUrl}` : ''}`
-      const searchResponse = await searchWeb({
-        query: companyQuery,
-        maxResults: 6,
-        searchDepth: 'advanced',
-      })
+      // Multi-source information gathering
+      const searchPromises = []
+
+      // 1. Company website search
+      if (companyUrl) {
+        const domain = new URL(companyUrl).hostname
+        searchPromises.push(
+          searchWeb({
+            query: `${userQuery} site:${domain}`,
+            maxResults: 3,
+            searchDepth: 'advanced',
+            includeRawContent: true,
+          }).catch(e => ({ results: [] }))
+        )
+      }
+
+      // 2. General company search
+      searchPromises.push(
+        searchWeb({
+          query: `${userQuery} ${company}`,
+          maxResults: 4,
+          searchDepth: 'advanced',
+        }).catch(e => ({ results: [] }))
+      )
+
+      // 3. RAG search if namespace available
+      let ragResults: any[] = []
+      if (state.namespace) {
+        try {
+          ragResults = await searchDocuments(userQuery, state.namespace, 5)
+        } catch (error) {
+          console.warn('RAG search failed:', error)
+        }
+      }
+
+      // Execute searches in parallel
+      const searchResults = await Promise.all(searchPromises)
+      const allResults = searchResults.flatMap(r => r.results || [])
 
       // Get memory context if available
       let contextualMemory = memoryContext
       if (userId && !contextualMemory) {
-        contextualMemory = await getMemoryContext(userQuery, {
-          user_id: userId,
-          agent_id: chatbotId,
-        })
+        try {
+          contextualMemory = await getMemoryContext(userQuery, {
+            user_id: userId,
+            agent_id: chatbotId,
+          })
+        } catch (error) {
+          console.warn('Failed to get memory context:', error)
+        }
       }
 
-      // Generate company-specific response
+      // Prepare comprehensive context
+      let contextSections = []
+
+      // Add RAG results if available
+      if (ragResults.length > 0) {
+        contextSections.push(`Company Knowledge Base:
+${ragResults.map(r => `- ${r.metadata?.title || 'Document'}: ${r.text ? r.text.substring(0, 300) : 'No content'}...`).join('\n')}`)
+      }
+
+      // Add search results
+      if (allResults.length > 0) {
+        contextSections.push(`Recent Information:
+${allResults.map(r => `- ${r.title}: ${r.content ? r.content.substring(0, 250) : 'No content'}...`).join('\n')}`)
+      }
+
+      // Add memory context
+      if (contextualMemory) {
+        contextSections.push(`Previous Conversation Context:\n${contextualMemory}`)
+      }
+
+      // Generate enhanced company-specific response
       const chatPrompt = `
-You are the official AI assistant for ${company}. You have access to comprehensive information about the company and should respond as if you represent the company directly.
+You are the official AI assistant for ${company}. You represent the company directly and should provide helpful, accurate information about ${company}.
 
-Company Context:
-- Company: ${company}
-- Website: ${companyUrl || 'Not provided'}
-
+Company: ${company}
+Website: ${companyUrl || 'Not provided'}
 User Question: ${userQuery}
 
-Recent Search Results:
-${searchResponse.results.map(r => `- ${r.title}: ${r.content.substring(0, 200)}...`).join('\n')}
-
-${contextualMemory ? `\nPrevious Conversation Context:\n${contextualMemory}` : ''}
+Available Information:
+${contextSections.join('\n\n')}
 
 Instructions:
-1. Always introduce yourself as "${company} Assistant" on first interaction
-2. Provide accurate, helpful information about ${company}
-3. Use the search results to give current, factual responses
-4. If you don't know something specific about ${company}, be honest and offer to help find the information
-5. Maintain a professional, friendly tone that represents the company well
-6. Focus specifically on ${company}-related topics
+1. Act as the official representative of ${company}
+2. Use "we", "our", and "us" when referring to ${company}
+3. Provide specific, accurate information based on the available context
+4. If the question is about ${company}, prioritize information from the company knowledge base and website
+5. Be helpful, professional, and maintain the company's brand voice
+6. If you don't have specific information, acknowledge this and offer to help find it
+7. Include relevant details like products, services, contact information when appropriate
+8. For general questions not about ${company}, still be helpful but clarify your role
 
-Response:
+Generate a comprehensive, helpful response:
 `
 
       const response = await this.model.invoke([
-        new SystemMessage(`You are the official AI assistant for ${company}. Always be helpful, accurate, and professional.`),
+        new SystemMessage(`You are the official AI assistant for ${company}. Always be helpful, accurate, and professional while representing the company.`),
         new HumanMessage(chatPrompt)
       ])
 
@@ -426,10 +482,32 @@ Response:
         }
       }
 
+      // Prepare sources for the response
+      const sources = [
+        ...ragResults.map((r, i) => ({
+          id: `rag-${i}`,
+          title: r.metadata?.title || 'Company Document',
+          url: r.metadata?.url || companyUrl || '#',
+          snippet: r.text ? r.text.substring(0, 200) : 'No content available',
+          type: 'rag' as const,
+          score: r.score
+        })),
+        ...allResults.map((r, i) => ({
+          id: `web-${i}`,
+          title: r.title,
+          url: r.url,
+          snippet: r.content ? r.content.substring(0, 200) : 'No content available',
+          type: 'web' as const,
+          score: r.score
+        }))
+      ]
+
       return {
         ...state,
         messages: [...messages, assistantMessage],
-        searchResults: searchResponse.results,
+        searchResults: allResults,
+        ragResults,
+        sources,
         currentStep: 'chat_response',
       }
     } catch (error) {
@@ -699,12 +777,14 @@ export async function handleCompanyChatQuery({
   messages,
   userId,
   chatbotId,
+  namespace,
 }: {
   company: string
   companyUrl?: string
   messages: BaseMessage[]
   userId?: string
   chatbotId?: string
+  namespace?: string
 }): Promise<{
   response: string
   sources: any[]
@@ -712,11 +792,17 @@ export async function handleCompanyChatQuery({
 }> {
   const agent = new CompanyResearchAgent()
   
+  // Generate namespace if not provided
+  const finalNamespace = namespace || (companyUrl ? 
+    new URL(companyUrl).hostname.replace(/\./g, '-') + '-' + Date.now() : 
+    company.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now())
+  
   const initialState: CompanyResearchState = {
     company,
     companyUrl,
     userId,
     chatbotId,
+    namespace: finalNamespace,
     messages,
     isCompanyChat: true,
   }
@@ -725,7 +811,14 @@ export async function handleCompanyChatQuery({
 
   return {
     response: (finalState.messages[finalState.messages.length - 1]?.content as string) || 'I apologize, but I encountered an error processing your request.',
-    sources: finalState.searchResults || [],
+    sources: finalState.sources || finalState.searchResults?.map(r => ({
+      id: r.url,
+      title: r.title,
+      url: r.url,
+      snippet: r.content.substring(0, 200),
+      type: 'web',
+      score: r.score,
+    })) || [],
     updatedMessages: finalState.messages,
   }
 } 

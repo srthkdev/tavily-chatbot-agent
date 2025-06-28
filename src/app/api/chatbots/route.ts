@@ -43,11 +43,31 @@ export async function GET(request: NextRequest) {
       ]
     )
     
-    const chatbots = response.documents
+    // Enhance chatbots with additional metadata and company info
+    const enhancedChatbots = response.documents.map(chatbot => {
+      const isCompanyBot = chatbot.url && chatbot.name && chatbot.namespace
+      
+      return {
+        ...chatbot,
+        type: isCompanyBot ? 'company' : 'standard',
+        isCompanySpecific: isCompanyBot,
+        companyInfo: isCompanyBot ? {
+          name: chatbot.name,
+          domain: chatbot.url ? new URL(chatbot.url).hostname : chatbot.namespace?.split('-')[0],
+          description: chatbot.description || `AI assistant for ${chatbot.name}`,
+          industry: null, // Could be extracted from metadata if stored
+        } : null,
+        stats: {
+          pagesCrawled: parseInt(chatbot.pagesCrawled || '0'),
+          documentsStored: 0, // Could be calculated from vector database
+          lastUsed: chatbot.updatedAt,
+        }
+      }
+    })
 
     return NextResponse.json({
       success: true,
-      data: chatbots
+      data: enhancedChatbots
     })
 
   } catch (error) {

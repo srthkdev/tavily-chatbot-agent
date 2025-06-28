@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     // Clear session cookie
     const cookieStore = await cookies()
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   // Handle GET request for logout (for logout links)
-  return POST(request)
+  return POST()
 } 

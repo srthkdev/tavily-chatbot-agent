@@ -255,7 +255,7 @@ export async function POST(request: NextRequest) {
       // Continue even if local storage fails
     }
 
-    // Save to Appwrite database with correct field names
+    // Save to Appwrite database with correct field names (only schema-defined fields)
     try {
       await databases.createDocument(
         clientConfig.appwrite.databaseId,
@@ -271,24 +271,12 @@ export async function POST(request: NextRequest) {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           
-          // Optional fields
+          // Optional fields that exist in schema
           description: description || companyMetadata.description || '',
           url: url || '',
           favicon: null,
-          
-          // Additional fields for functionality (not in schema but used by app)
-          title: name || companyMetadata.name,
-          type: type || 'standard',
-          companyName: companyData?.name || companyMetadata.name,
-          domain: companyMetadata.domain,
-          industry: companyData?.industry || companyMetadata.industry,
-          documentsStored: documents.length,
-          createdBy: user.$id,
-          isActive: true,
           published: false,
           publicUrl: null,
-          metadata: JSON.stringify(enhancedChatbotData.metadata),
-          companyData: companyData ? JSON.stringify(companyData) : null,
         }
       )
       console.log('Successfully saved chatbot to Appwrite database')

@@ -40,9 +40,9 @@ interface CompanyProject {
   companyData?: {
     name: string
     url?: string
-    industry?: string
-    hqLocation?: string
-    researchReport?: string
+    industry?: string | null
+    hqLocation?: string | null
+    researchReport?: string | null
     companyInfo?: any
     generatedAt?: string
   }
@@ -85,11 +85,33 @@ export default function ProjectWorkspace() {
         
         if (response.ok) {
           const result = await response.json()
-          if (result.success) {
-            setProject(result.data)
+          if (result.success && result.data) {
+            // Transform chatbot data to project format
+            const chatbotData = result.data
+            const projectData = {
+              $id: chatbotData.$id,
+              name: chatbotData.name,
+              url: chatbotData.url,
+              description: chatbotData.description,
+              type: 'company_research',
+              namespace: chatbotData.namespace,
+              createdAt: chatbotData.createdAt,
+              companyData: {
+                name: chatbotData.name,
+                url: chatbotData.url,
+                industry: null,
+                hqLocation: null,
+                researchReport: null,
+                companyInfo: {},
+                generatedAt: chatbotData.createdAt
+              }
+            }
+            setProject(projectData)
           } else {
             throw new Error('Project not found')
           }
+        } else if (response.status === 404) {
+          throw new Error('Project not found')
         } else {
           throw new Error('Failed to load project')
         }
@@ -142,9 +164,9 @@ export default function ProjectWorkspace() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="min-h-screen bg-background">
           {/* Header */}
-          <div className="border-b border-blue-100 bg-white/50 backdrop-blur-sm">
+          <div className="border-b bg-card backdrop-blur-sm">
             <div className="flex items-center px-4 py-4">
               <SidebarTrigger className="mr-4" />
               <div className="flex justify-between items-center w-full">
@@ -153,10 +175,10 @@ export default function ProjectWorkspace() {
                     <Building2 className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-xl font-bold text-gray-900">
+                    <h1 className="text-xl font-bold text-foreground">
                       {companyData?.name || project.name}
                     </h1>
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-muted-foreground">
                       {companyData?.industry || 'Company'} • Created {new Date(project.createdAt).toLocaleDateString()}
                     </p>
                   </div>
@@ -193,7 +215,7 @@ export default function ProjectWorkspace() {
       <div className="px-6 py-8">
         {/* Company Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="bg-white/80 backdrop-blur-sm border-blue-100">
+          <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center space-x-2">
                 <Globe className="w-4 h-4 text-blue-600" />
@@ -201,7 +223,7 @@ export default function ProjectWorkspace() {
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-gray-600 truncate">
+              <p className="text-sm text-muted-foreground truncate">
                 {companyData?.url || 'Not provided'}
               </p>
             </CardContent>
@@ -463,14 +485,47 @@ export default function ProjectWorkspace() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        // Trigger re-research
-                        toast.info('Re-research functionality coming soon')
+                      onClick={async () => {
+                        try {
+                          toast.info('Generating comprehensive research report...')
+                          const response = await fetch(`/api/projects/${project.$id}/research`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              company: companyData?.name || project.name,
+                              companyUrl: companyData?.url || project.url,
+                              industry: companyData?.industry,
+                              hqLocation: companyData?.hqLocation
+                            })
+                          })
+                          
+                          if (response.ok) {
+                            const result = await response.json()
+                            if (result.success) {
+                              // Update project with new research data
+                              setProject(prev => prev ? {
+                                ...prev,
+                                companyData: {
+                                  ...prev.companyData,
+                                  ...result.data.researchData
+                                }
+                              } : null)
+                              toast.success('Research report generated successfully!')
+                            } else {
+                              toast.error('Failed to generate research report')
+                            }
+                          } else {
+                            toast.error('Failed to generate research report')
+                          }
+                        } catch (error) {
+                          console.error('Research generation error:', error)
+                          toast.error('Failed to generate research report')
+                        }
                       }}
                       className="text-blue-600 hover:text-blue-700"
                     >
                       <BarChart3 className="w-4 h-4 mr-2" />
-                      Update Research
+                      Generate Research
                     </Button>
                   </div>
                 </div>

@@ -156,9 +156,9 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-blue-100 bg-white/50 backdrop-blur-sm">
+      <div className="border-b bg-card backdrop-blur-sm">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-3">
@@ -166,8 +166,8 @@ export default function HomePage() {
                 <Building2 className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Company Research AI</h1>
-                <p className="text-xs text-gray-500">Comprehensive Business Intelligence Platform</p>
+                <h1 className="text-xl font-bold text-foreground">Company Research AI</h1>
+                <p className="text-xs text-muted-foreground">Comprehensive Business Intelligence Platform</p>
               </div>
             </div>
             
@@ -207,10 +207,11 @@ export default function HomePage() {
           </div>
           
           <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">
-            AI-Powered{' '}
             <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Company Research
+              Walnut AI
             </span>
+            <br />
+            Business Intelligence
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
             Get comprehensive business intelligence, financial insights, and an AI assistant for any company in minutes.

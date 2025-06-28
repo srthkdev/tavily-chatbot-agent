@@ -55,14 +55,14 @@ export default function DashboardPage() {
     }
   }, [authLoading, isAuthenticated, router])
 
-  // Load chatbots from database
+  // Load projects from database
   useEffect(() => {
-    const loadChatbots = async () => {
+    const loadProjects = async () => {
       if (!isAuthenticated) return
       
       try {
         setChatbotsLoading(true)
-        const response = await fetch('/api/chatbots')
+        const response = await fetch('/api/projects')
         if (response.ok) {
           const result = await response.json()
           if (result.success) {
@@ -70,13 +70,13 @@ export default function DashboardPage() {
           }
         }
       } catch (error) {
-        console.error('Failed to load chatbots:', error)
+        console.error('Failed to load projects:', error)
       } finally {
         setChatbotsLoading(false)
       }
     }
 
-    loadChatbots()
+    loadProjects()
   }, [isAuthenticated])
 
   // Only use database chatbots (no localStorage fallback)
@@ -89,29 +89,29 @@ export default function DashboardPage() {
     chatbot.url?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const handleDelete = async (chatbotId: string) => {
+  const handleDelete = async (projectId: string) => {
     try {
-      const response = await fetch(`/api/chatbots/${chatbotId}`, {
+      const response = await fetch(`/api/projects/${projectId}`, {
         method: 'DELETE',
       })
       
       if (response.ok) {
-        // Refresh the chatbots list
-        const updatedResponse = await fetch('/api/chatbots')
+        // Refresh the projects list
+        const updatedResponse = await fetch('/api/projects')
         if (updatedResponse.ok) {
           const result = await updatedResponse.json()
           if (result.success) {
             setChatbots(result.data)
           }
         }
-        toast.success('Chatbot deleted successfully')
+        toast.success('Project deleted successfully')
         setDeleteModal({ show: false })
       } else {
-        throw new Error('Failed to delete chatbot')
+        throw new Error('Failed to delete project')
       }
     } catch (error) {
       console.error('Delete error:', error)
-      toast.error('Failed to delete chatbot')
+      toast.error('Failed to delete project')
     }
   }
 
@@ -159,15 +159,15 @@ export default function DashboardPage() {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+        <div className="min-h-screen bg-background">
           {/* Header */}
-          <div className="border-b border-blue-100 bg-white/50 backdrop-blur-sm">
+          <div className="border-b bg-card backdrop-blur-sm">
             <div className="flex items-center px-4 py-4">
               <SidebarTrigger className="mr-4" />
               <div className="flex justify-between items-center w-full">
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900">My Projects</h1>
-                  <p className="text-sm text-gray-500">
+                  <h1 className="text-xl font-bold text-foreground">My Projects</h1>
+                  <p className="text-sm text-muted-foreground">
                     {allChatbots.length} project{allChatbots.length !== 1 ? 's' : ''} created
                   </p>
                 </div>
@@ -190,7 +190,7 @@ export default function DashboardPage() {
         <div className="mb-8">
                       <div className="flex items-center space-x-4 mb-4">
               <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
                   placeholder="Search projects..."
                   value={searchQuery}
@@ -203,16 +203,16 @@ export default function DashboardPage() {
               onClick={async () => {
                 setChatbotsLoading(true)
                 try {
-                  const response = await fetch('/api/chatbots')
+                  const response = await fetch('/api/projects')
                   if (response.ok) {
                     const result = await response.json()
                     if (result.success) {
                       setChatbots(result.data)
-                                              toast.success('Projects refreshed')
+                      toast.success('Projects refreshed')
                     }
                   }
                 } catch (error) {
-                  console.error('Failed to refresh chatbots:', error)
+                  console.error('Failed to refresh projects:', error)
                   toast.error('Failed to refresh projects')
                 } finally {
                   setChatbotsLoading(false)
@@ -232,13 +232,13 @@ export default function DashboardPage() {
         {/* Chatbots Grid */}
         {filteredIndexes.length === 0 ? (
           <div className="text-center py-16">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Database className="w-8 h-8 text-gray-400" />
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+              <Database className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-lg font-semibold text-foreground mb-2">
               {allChatbots.length === 0 ? 'No chatbots yet' : 'No matching chatbots'}
             </h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
               {allChatbots.length === 0 
                 ? 'Create your first AI chatbot by entering a website URL.' 
                 : 'Try adjusting your search query to find your chatbots.'
@@ -258,15 +258,15 @@ export default function DashboardPage() {
             {filteredIndexes.map((chatbot) => (
               <Card 
                 key={chatbot.$id} 
-                className="group hover:shadow-lg transition-all duration-200 border-blue-100 hover:border-blue-200 bg-white/80 backdrop-blur-sm"
+                className="group hover:shadow-lg transition-all duration-200"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-lg font-semibold text-gray-900 truncate">
+                      <CardTitle className="text-lg font-semibold truncate">
                         {chatbot.name || new URL(chatbot.url || '').hostname}
                       </CardTitle>
-                      <CardDescription className="text-sm text-gray-600 mt-1 line-clamp-2">
+                      <CardDescription className="text-sm mt-1 line-clamp-2">
                         {chatbot.description || `AI chatbot for ${new URL(chatbot.url || '').hostname}`}
                       </CardDescription>
                     </div>
@@ -284,7 +284,7 @@ export default function DashboardPage() {
                 <CardContent className="pt-0">
                   <div className="space-y-3">
                     {/* URL */}
-                    <div className="flex items-center text-sm text-gray-600">
+                    <div className="flex items-center text-sm text-muted-foreground">
                       <Globe className="w-4 h-4 mr-2 flex-shrink-0" />
                       <span className="truncate">{chatbot.url}</span>
                       <Button
@@ -303,11 +303,11 @@ export default function DashboardPage() {
 
                     {/* Stats */}
                     <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center text-gray-600">
+                      <div className="flex items-center text-muted-foreground">
                         <Database className="w-4 h-4 mr-1" />
                         <span>{chatbot.pagesCrawled} results</span>
                       </div>
-                      <div className="flex items-center text-gray-500">
+                      <div className="flex items-center text-muted-foreground">
                         <Clock className="w-4 h-4 mr-1" />
                         <span>{formatDate(chatbot.createdAt)}</span>
                       </div>

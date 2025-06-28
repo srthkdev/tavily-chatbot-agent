@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/auth-context";
+import { ThemeProvider } from "@/contexts/theme-context";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,20 +16,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tavily Chatbot - AI-Powered Search & Conversation",
-  description: "Get real-time answers from the web with personalized memory. Powered by Tavily search, Mem0 memory, and multiple AI providers.",
-  keywords: "AI chatbot, Tavily search, web search, real-time answers, AI conversation, Mem0 memory",
-  authors: [{ name: "Tavily Chatbot Team" }],
+  title: "Walnut AI - Business Intelligence & Research",
+  description: "Comprehensive company research, financial insights, and AI-powered business intelligence. Get detailed reports and chat with company-specific AI assistants.",
+  keywords: "business intelligence, company research, financial analysis, AI research, market analysis, corporate intelligence",
+  authors: [{ name: "Walnut AI Team" }],
   openGraph: {
-    title: "Tavily Chatbot - AI-Powered Search & Conversation",
-    description: "Get real-time answers from the web with personalized memory.",
+    title: "Walnut AI - Business Intelligence & Research",
+    description: "Comprehensive company research and AI-powered business intelligence.",
     type: "website",
-    url: "https://tavily-chatbot.vercel.app",
+    url: "https://walnut-ai.vercel.app",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Tavily Chatbot",
-    description: "AI-powered search and conversation with real-time web results",
+    title: "Walnut AI",
+    description: "AI-powered business intelligence and company research platform",
   },
 };
 
@@ -37,13 +39,19 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <ThemeProvider
+          defaultTheme="dark"
+          storageKey="walnut-ai-theme"
+        >
+          <AuthProvider>
+            {children}
+            <Toaster richColors position="top-right" />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

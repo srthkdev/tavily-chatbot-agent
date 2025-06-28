@@ -361,15 +361,15 @@ class TavilyAgent {
 
   // Determine if this is a company-specific query
   private analyzeQuery(state: AgentState): AgentState {
-    const { query, namespace, chatbotId } = state
+    const { query, namespace, chatbotId, companyInfo: existingCompanyInfo } = state
     
-    // If we have a namespace or chatbotId, this is company-specific
-    const isCompanySpecific = !!(namespace || chatbotId)
+    // If we have a namespace, chatbotId, or existing company info, this is company-specific
+    const isCompanySpecific = !!(namespace || chatbotId || existingCompanyInfo)
     
-    let companyInfo: CompanyInfo | undefined
+    let companyInfo: CompanyInfo | undefined = existingCompanyInfo
     let queryIntent: QueryIntent | undefined
     
-    if (isCompanySpecific && namespace) {
+    if (isCompanySpecific && !companyInfo && namespace) {
       // Extract company info from namespace
       const domain = namespace.split('-')[0].replace(/-/g, '.')
       const name = domain.split('.')[0]
@@ -378,9 +378,11 @@ class TavilyAgent {
         domain,
         description: `AI assistant for ${name}`,
       }
-      
+    }
+    
+    if (companyInfo) {
       // Analyze query intent for better search targeting
-      queryIntent = analyzeQueryIntent(query, name)
+      queryIntent = analyzeQueryIntent(query, companyInfo.name)
     }
 
     return {
@@ -687,12 +689,14 @@ export async function processQuery({
   userId,
   chatbotId,
   namespace,
+  companyInfo,
 }: {
   messages: BaseMessage[]
   query: string
   userId?: string
   chatbotId?: string
   namespace?: string
+  companyInfo?: CompanyInfo
 }): Promise<{
   response: string
   sources: Source[]
@@ -706,7 +710,8 @@ export async function processQuery({
     userId,
     chatbotId,
     namespace,
-    isCompanySpecific: false,
+    companyInfo,
+    isCompanySpecific: !!(namespace || chatbotId || companyInfo),
   }
 
   const result = await agent.processQuery(initialState)
