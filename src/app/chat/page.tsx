@@ -5,14 +5,15 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Globe, Database } from "lucide-react"
-import { ChatInterface } from '@/components/chat/chat-interface'
+import { AIChatInterface } from '@/components/chat/ai-chat-interface'
 
 function ChatPageContent() {
   const searchParams = useSearchParams()
   const namespace = searchParams.get('namespace')
   const chatbotName = searchParams.get('name') || 'Chatbot'
-  const useWebSearch = searchParams.get('webSearch') === 'true'
-  const maxResults = parseInt(searchParams.get('maxResults') || '5')
+  // Note: These parameters are available for future use
+  // const useWebSearch = searchParams.get('webSearch') === 'true'
+  // const maxResults = parseInt(searchParams.get('maxResults') || '5')
 
   return (
     <div className="flex flex-col h-screen bg-background">
@@ -42,10 +43,10 @@ function ChatPageContent() {
       </header>
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto h-full">
-            <ChatInterface 
-              namespace={namespace || undefined} 
-              useWebSearch={useWebSearch || !namespace}
-              maxResults={maxResults}
+            <AIChatInterface 
+              companyName={chatbotName}
+              namespace={namespace || undefined}
+              chatbotId={namespace || undefined}
             />
         </div>
       </main>

@@ -1,28 +1,30 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createSessionClient } from '@/lib/appwrite'
 import { Query } from 'node-appwrite'
+import { cookies } from 'next/headers'
 import { clientConfig } from '@/config/tavily.config'
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
     // Get the current user from session
-    const sessionCookie = request.headers.get('cookie')
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
     
     if (!sessionCookie) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
-    // Extract session token from cookie
-    const sessionMatch = sessionCookie.match(/session=([^;]+)/)
-    if (!sessionMatch) {
-      return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 })
-    }
-
     // Create session client
-    const { account, databases } = createSessionClient(sessionMatch[1])
+    const { account, databases } = createSessionClient(sessionCookie.value)
 
     // Get current user
-    const user = await account.get()
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
+      console.error('Session validation failed:', error)
+      return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 })
+    }
     
     // Get user's projects from database (using chatbots collection as projects)
     const projects = await databases.listDocuments(
@@ -30,7 +32,7 @@ export async function GET(request: Request) {
       clientConfig.appwrite.collections.chatbots,
       [
         Query.equal('userId', user.$id),
-        Query.orderDesc('createdAt'),
+        Query.orderDesc('$createdAt'),
         Query.limit(100)
       ]
     )
@@ -51,8 +53,8 @@ export async function GET(request: Request) {
       documentsStored: 0, // Could be calculated from vector DB
       companyData: null, // Will be populated separately if needed
       settings: {},
-      createdAt: project.createdAt,
-      updatedAt: project.updatedAt
+      createdAt: project.$createdAt,
+      updatedAt: project.$updatedAt
     }))
 
     return NextResponse.json({
@@ -70,27 +72,30 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { name, description, url } = body
 
     // Get the current user from session
-    const sessionCookie = request.headers.get('cookie')
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
     
     if (!sessionCookie) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
-    // Extract session token from cookie
-    const sessionMatch = sessionCookie.match(/session=([^;]+)/)
-    if (!sessionMatch) {
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
+    
+    // Get current user
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
+      console.error('Session validation failed:', error)
       return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 })
     }
-
-    // Create session client
-    const { account, databases } = createSessionClient(sessionMatch[1])
-    const user = await account.get()
 
     // Generate namespace
     const namespace = `${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}`
@@ -128,7 +133,7 @@ export async function POST(request: Request) {
         pagesCrawled: parseInt(project.pagesCrawled || '0'),
         documentsStored: 0,
         companyData: null,
-        createdAt: project.createdAt
+        createdAt: project.$createdAt
       }
     })
 

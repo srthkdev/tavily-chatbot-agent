@@ -34,22 +34,22 @@ export async function POST(request: NextRequest) {
 
     // Set session cookie - use secret for server-side operations
     const cookieStore = await cookies()
-    // For SSR, Appwrite expects the raw session secret as the value that will be
-    // provided later to client.setSession(secret). The official docs explicitly
-    // mention to "Use the secret property of the session object as the cookie
-    // value". Pre-pending the userId is **not** required and causes the SDK to
-    // treat the token as invalid, resulting in 401 responses.
     const sessionToken = session.secret
     
+    // Enhanced cookie configuration for better persistence
     cookieStore.set('appwrite-session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 60 * 60 * 24 * 30, // 30 days
       path: '/',
+      // Add domain for better cross-subdomain support if needed
+      ...(process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN && {
+        domain: process.env.COOKIE_DOMAIN
+      })
     })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Login successful',
       user: {
@@ -57,6 +57,20 @@ export async function POST(request: NextRequest) {
         sessionId: session.$id,
       }
     })
+
+    // Also set the cookie on the response for immediate availability
+    response.cookies.set('appwrite-session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: '/',
+      ...(process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN && {
+        domain: process.env.COOKIE_DOMAIN
+      })
+    })
+
+    return response
 
   } catch (error) {
     console.error('Login error:', error)

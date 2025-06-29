@@ -124,15 +124,22 @@ export async function POST(request: NextRequest) {
 
     // Set session cookie - use secret for server-side operations
     const cookieStore = await cookies()
-    cookieStore.set('appwrite-session', session.secret, {
+    const sessionToken = session.secret
+    
+    // Enhanced cookie configuration for better persistence
+    cookieStore.set('appwrite-session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
       maxAge: 60 * 60 * 24 * 30, // 30 days
       path: '/',
+      // Add domain for better cross-subdomain support if needed
+      ...(process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN && {
+        domain: process.env.COOKIE_DOMAIN
+      })
     })
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Account created successfully',
       user: {
@@ -142,6 +149,20 @@ export async function POST(request: NextRequest) {
         sessionId: session.$id,
       }
     })
+
+    // Also set the cookie on the response for immediate availability
+    response.cookies.set('appwrite-session', sessionToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      path: '/',
+      ...(process.env.NODE_ENV === 'production' && process.env.COOKIE_DOMAIN && {
+        domain: process.env.COOKIE_DOMAIN
+      })
+    })
+
+    return response
 
   } catch (error) {
     console.error('Registration error:', error)

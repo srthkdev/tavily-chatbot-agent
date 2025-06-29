@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSessionClient } from '@/lib/appwrite'
 import { chatStorage } from '@/lib/chat-storage'
+import { cookies } from 'next/headers'
+import { clientConfig } from '@/config/tavily.config'
 
 export async function GET(request: NextRequest) {
   try {
@@ -49,6 +51,64 @@ export async function GET(request: NextRequest) {
         error: 'Failed to load chat history',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { chatbotId, message } = body
+
+    if (!chatbotId || !message) {
+      return NextResponse.json({ error: 'Chatbot ID and message are required' }, { status: 400 })
+    }
+
+    // Check authentication
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
+    
+    if (!sessionCookie) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
+
+    // Get current user
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
+      console.error('Session validation failed:', error)
+      return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
+    }
+
+    // Save chat message
+    await databases.createDocument(
+      clientConfig.appwrite.databaseId,
+      clientConfig.appwrite.collections.messages,
+      'unique()',
+      {
+        chatbotId,
+        userId: user.$id,
+        messageId: message.id,
+        role: message.role,
+        content: message.content,
+        sources: JSON.stringify(message.sources || []),
+        capabilities: JSON.stringify(message.capabilities || []),
+        timestamp: message.timestamp,
+        createdAt: new Date().toISOString()
+      }
+    )
+
+    return NextResponse.json({ success: true })
+
+  } catch (error) {
+    console.error('Save chat message error:', error)
+    return NextResponse.json(
+      { error: 'Failed to save chat message' },
       { status: 500 }
     )
   }

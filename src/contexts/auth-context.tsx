@@ -37,21 +37,33 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const refreshUser = async () => {
+  const refreshUser = async (retryCount = 0) => {
     try {
-      const response = await fetch('/api/auth/me')
+      const response = await fetch('/api/auth/me', {
+        credentials: 'include', // Ensure cookies are included
+        cache: 'no-store' // Prevent caching issues
+      })
+      
       if (response.ok) {
         const result = await response.json()
         if (result.success) {
           setUser(result.user)
-        } else {
-          setUser(null)
+          return
         }
-      } else {
-        setUser(null)
       }
+      
+      // If we get here, authentication failed
+      setUser(null)
     } catch (error) {
       console.error('Failed to refresh user:', error)
+      
+      // Retry once if it's a network error and this is the first attempt
+      if (retryCount === 0 && error instanceof TypeError) {
+        console.log('Retrying authentication check...')
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        return refreshUser(1)
+      }
+      
       setUser(null)
     }
   }
@@ -60,6 +72,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email, password })
     })
 
@@ -73,8 +86,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error(result.error || 'Login failed')
     }
 
-    // Small delay to ensure cookie is set before refreshing user
-    await new Promise(resolve => setTimeout(resolve, 100))
+    // Wait a bit longer to ensure cookie is properly set
+    await new Promise(resolve => setTimeout(resolve, 500))
     await refreshUser()
   }
 
@@ -82,6 +95,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const response = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email, password, name })
     })
 
@@ -95,14 +109,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error(result.error || 'Registration failed')
     }
 
-    // Small delay to ensure cookie is set before refreshing user
-    await new Promise(resolve => setTimeout(resolve, 100))
+    // Wait a bit longer to ensure cookie is properly set
+    await new Promise(resolve => setTimeout(resolve, 500))
     await refreshUser()
   }
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
+      await fetch('/api/auth/logout', { 
+        method: 'POST',
+        credentials: 'include'
+      })
     } catch (error) {
       console.error('Logout error:', error)
     }
@@ -111,12 +128,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     const initAuth = async () => {
+      // Add a small delay to ensure the DOM is ready
+      await new Promise(resolve => setTimeout(resolve, 100))
       await refreshUser()
       setIsLoading(false)
     }
 
     initAuth()
   }, [])
+
+  // Add visibility change listener to refresh auth when tab becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user) {
+        // Refresh user data when tab becomes visible to catch session expiry
+        refreshUser()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [user])
 
   const value: AuthContextType = {
     user,

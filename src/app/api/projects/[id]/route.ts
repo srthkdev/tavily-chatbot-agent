@@ -1,28 +1,39 @@
-import { NextResponse } from 'next/server'
-import { databases, account } from '@/lib/appwrite'
-
-const DATABASE_ID = process.env.NEXT_PUBLIC_APPWRITE_DATABASE_ID!
+import { NextRequest, NextResponse } from 'next/server'
+import { createSessionClient } from '@/lib/appwrite'
+import { cookies } from 'next/headers'
+import { clientConfig } from '@/config/tavily.config'
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
 
-    // Get the current user
-    const sessionCookie = request.headers.get('cookie')?.split('; ').find(c => c.startsWith('session='))?.split('=')[1]
+    // Check authentication using cookies
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
     
     if (!sessionCookie) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
-    const user = await account.get()
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
 
-    // Get project
+    // Get current user
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
+      console.error('Session validation failed:', error)
+      return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 })
+    }
+
+    // Get project from chatbots collection (since we're using it as projects)
     const project = await databases.getDocument(
-      DATABASE_ID,
-      'projects',
+      clientConfig.appwrite.databaseId,
+      clientConfig.appwrite.collections.chatbots,
       id
     )
 
@@ -31,24 +42,24 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
     }
 
-    // Transform project
+    // Transform project data
     const transformedProject = {
       $id: project.$id,
       name: project.name,
       description: project.description,
       url: project.url,
-      type: project.type,
+      type: project.type || 'company_research',
       namespace: project.namespace,
       status: project.status,
-      published: project.published,
-      publicUrl: project.publicUrl,
-      favicon: project.favicon,
-      pagesCrawled: project.pagesCrawled || 0,
-      documentsStored: project.documentsStored || 0,
-      companyData: project.companyData ? JSON.parse(project.companyData) : null,
-      settings: project.settings ? JSON.parse(project.settings) : {},
-      createdAt: project.createdAt,
-      updatedAt: project.updatedAt
+      published: project.published || false,
+      publicUrl: project.publicUrl || null,
+      favicon: project.favicon || null,
+      pagesCrawled: parseInt(project.pagesCrawled || '0'),
+      documentsStored: 0, // Could be calculated from vector DB
+      companyData: project.companyData ? (typeof project.companyData === 'string' ? JSON.parse(project.companyData) : project.companyData) : null,
+      settings: project.settings ? (typeof project.settings === 'string' ? JSON.parse(project.settings) : project.settings) : {},
+      createdAt: project.createdAt || project.$createdAt,
+      updatedAt: project.updatedAt || project.$updatedAt
     }
 
     return NextResponse.json({
@@ -66,25 +77,36 @@ export async function GET(
 }
 
 export async function DELETE(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
 
-    // Get the current user
-    const sessionCookie = request.headers.get('cookie')?.split('; ').find(c => c.startsWith('session='))?.split('=')[1]
+    // Check authentication
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
     
     if (!sessionCookie) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
-    const user = await account.get()
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
+
+    // Get current user
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
+      console.error('Session validation failed:', error)
+      return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 })
+    }
 
     // Get project to verify ownership
     const project = await databases.getDocument(
-      DATABASE_ID,
-      'projects',
+      clientConfig.appwrite.databaseId,
+      clientConfig.appwrite.collections.chatbots,
       id
     )
 
@@ -95,8 +117,8 @@ export async function DELETE(
 
     // Delete project
     await databases.deleteDocument(
-      DATABASE_ID,
-      'projects',
+      clientConfig.appwrite.databaseId,
+      clientConfig.appwrite.collections.chatbots,
       id
     )
 
@@ -115,26 +137,37 @@ export async function DELETE(
 }
 
 export async function PUT(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params
     const body = await request.json()
 
-    // Get the current user
-    const sessionCookie = request.headers.get('cookie')?.split('; ').find(c => c.startsWith('session='))?.split('=')[1]
+    // Check authentication
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
     
     if (!sessionCookie) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
-    const user = await account.get()
+    // Create session client
+    const { account, databases } = createSessionClient(sessionCookie.value)
+
+    // Get current user
+    let user
+    try {
+      user = await account.get()
+    } catch (error) {
+      console.error('Session validation failed:', error)
+      return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 })
+    }
 
     // Get project to verify ownership
     const project = await databases.getDocument(
-      DATABASE_ID,
-      'projects',
+      clientConfig.appwrite.databaseId,
+      clientConfig.appwrite.collections.chatbots,
       id
     )
 
@@ -145,8 +178,8 @@ export async function PUT(
 
     // Update project
     const updatedProject = await databases.updateDocument(
-      DATABASE_ID,
-      'projects',
+      clientConfig.appwrite.databaseId,
+      clientConfig.appwrite.collections.chatbots,
       id,
       {
         ...body,
@@ -161,13 +194,13 @@ export async function PUT(
         name: updatedProject.name,
         description: updatedProject.description,
         url: updatedProject.url,
-        type: updatedProject.type,
+        type: updatedProject.type || 'company_research',
         namespace: updatedProject.namespace,
         status: updatedProject.status,
         published: updatedProject.published,
-        pagesCrawled: updatedProject.pagesCrawled,
-        documentsStored: updatedProject.documentsStored,
-        companyData: updatedProject.companyData ? JSON.parse(updatedProject.companyData) : null,
+        pagesCrawled: parseInt(updatedProject.pagesCrawled || '0'),
+        documentsStored: 0,
+        companyData: updatedProject.companyData ? (typeof updatedProject.companyData === 'string' ? JSON.parse(updatedProject.companyData) : updatedProject.companyData) : null,
         updatedAt: updatedProject.updatedAt
       }
     })

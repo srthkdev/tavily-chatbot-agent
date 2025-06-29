@@ -116,7 +116,7 @@ function getAIModel() {
   throw new Error('No AI provider configured')
 }
 
-// Company Research Agent Class
+// Walnut AI Business Intelligence Research Agent
 export class CompanyResearchAgent {
   private model: ChatOpenAI | ChatGoogleGenerativeAI
 

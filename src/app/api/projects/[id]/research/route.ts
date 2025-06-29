@@ -3,7 +3,8 @@ import { createSessionClient } from '@/lib/appwrite'
 import { clientConfig } from '@/config/tavily.config'
 import { runCompanyResearch } from '@/lib/company-research-agent'
 import { checkRateLimit } from '@/lib/rate-limit'
-import { researchStorage } from '@/lib/research-storage'
+import { cookies } from 'next/headers'
+import { Query } from 'node-appwrite'
 
 export async function POST(
   request: NextRequest,
@@ -15,18 +16,15 @@ export async function POST(
     const { company, companyUrl, industry, hqLocation } = body
 
     // Check authentication
-    const sessionCookie = request.headers.get('cookie')
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
+    
     if (!sessionCookie) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
-    const sessionMatch = sessionCookie.match(/appwrite-session=([^;]+)/)
-    if (!sessionMatch) {
-      return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 })
-    }
-
     // Create session client
-    const { account, databases } = createSessionClient(sessionMatch[1])
+    const { account, databases } = createSessionClient(sessionCookie.value)
     const user = await account.get()
 
     // Check rate limit
@@ -58,65 +56,95 @@ export async function POST(
 
     // Run company research
     const result = await runCompanyResearch({
-      company: company || project.name,
-      companyUrl: companyUrl || project.url,
+      company,
+      companyUrl,
       industry,
       hqLocation,
       userId: user.$id,
     })
 
-    // Save research data using the research storage service
-    const researchData = await researchStorage.saveResearch({
-      chatbotId: id,
-      userId: user.$id,
-      name: company || project.name,
-      url: companyUrl || project.url,
-      industry,
-      hqLocation,
-      researchReport: result.report,
-      companyInfo: result.companyInfo,
-      // references: result.references, // Removed due to collection limit
-      generatedAt: new Date().toISOString(),
-    })
-
-    // Update project description to indicate it has research data
-    await databases.updateDocument(
+    // Save research to the research_reports collection
+    const now = new Date().toISOString()
+    
+    // Check if research already exists
+    const existingResearch = await databases.listDocuments(
       clientConfig.appwrite.databaseId,
-      clientConfig.appwrite.collections.chatbots,
-      id,
-      {
-        description: `AI assistant for ${researchData.name} with comprehensive research data`,
-        updatedAt: new Date().toISOString(),
-      }
+      'research_reports',
+      [
+        Query.equal('chatbotId', id),
+        Query.equal('userId', user.$id),
+        Query.limit(1)
+      ]
     )
+
+    let researchDoc
+    if (existingResearch.documents.length > 0) {
+      // Update existing research
+      researchDoc = await databases.updateDocument(
+        clientConfig.appwrite.databaseId,
+        'research_reports',
+        existingResearch.documents[0].$id,
+        {
+          companyName: company,
+          companyUrl: companyUrl || '',
+          industry: industry || '',
+          hqLocation: hqLocation || '',
+          researchReport: result.report,
+          companyInfo: JSON.stringify(result.companyInfo || {}),
+          references: JSON.stringify(result.references || []),
+          generatedAt: now,
+          status: 'completed'
+        }
+      )
+    } else {
+      // Create new research
+      researchDoc = await databases.createDocument(
+        clientConfig.appwrite.databaseId,
+        'research_reports',
+        'unique()',
+        {
+          chatbotId: id,
+          userId: user.$id,
+          companyName: company,
+          companyUrl: companyUrl || '',
+          industry: industry || '',
+          hqLocation: hqLocation || '',
+          researchReport: result.report,
+          companyInfo: JSON.stringify(result.companyInfo || {}),
+          references: JSON.stringify(result.references || []),
+          generatedAt: now,
+          status: 'completed',
+          createdAt: now
+        }
+      )
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        projectId: id,
         researchData: {
-          name: researchData.name,
-          url: researchData.url,
-          industry: researchData.industry,
-          hqLocation: researchData.hqLocation,
-          researchReport: researchData.researchReport,
-          companyInfo: researchData.companyInfo,
-          generatedAt: researchData.generatedAt,
+          $id: researchDoc.$id,
+          chatbotId: id,
+          userId: user.$id,
+          name: company,
+          url: companyUrl,
+          industry,
+          hqLocation,
+          researchReport: result.report,
+          companyInfo: result.companyInfo || {},
+          references: result.references || [],
+          generatedAt: now
         },
-        report: researchData.researchReport,
-        // references: researchData.references, // Removed due to collection limit
-        companyInfo: researchData.companyInfo,
+        companyInfo: result.companyInfo,
+        report: result.report,
+        references: result.references
       }
     })
 
   } catch (error) {
     console.error('Research generation error:', error)
     return NextResponse.json(
-      { 
-        success: false,
-        error: 'Failed to generate research',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { success: false, error: 'Failed to generate research' },
       { status: 500 }
     )
   }
@@ -130,18 +158,15 @@ export async function GET(
     const { id } = await params
 
     // Check authentication
-    const sessionCookie = request.headers.get('cookie')
+    const cookieStore = await cookies()
+    const sessionCookie = cookieStore.get('appwrite-session')
+    
     if (!sessionCookie) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
     }
 
-    const sessionMatch = sessionCookie.match(/appwrite-session=([^;]+)/)
-    if (!sessionMatch) {
-      return NextResponse.json({ success: false, error: 'Invalid session' }, { status: 401 })
-    }
-
     // Create session client
-    const { account, databases } = createSessionClient(sessionMatch[1])
+    const { account, databases } = createSessionClient(sessionCookie.value)
     const user = await account.get()
 
     // Get project
@@ -155,8 +180,16 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 })
     }
 
-    // Get research data from research storage
-    const researchData = await researchStorage.getResearch(id, user.$id)
+    // Get research data from research_reports collection
+    const researchResult = await databases.listDocuments(
+      clientConfig.appwrite.databaseId,
+      'research_reports',
+      [
+        Query.equal('chatbotId', id),
+        Query.equal('userId', user.$id),
+        Query.limit(1)
+      ]
+    )
     
     let companyData = {
       name: project.name,
@@ -165,18 +198,21 @@ export async function GET(
       hqLocation: null as string | null,
       researchReport: null as string | null,
       companyInfo: {},
-      generatedAt: project.createdAt
+      generatedAt: project.createdAt,
+      references: []
     }
 
-    if (researchData) {
+    if (researchResult.documents.length > 0) {
+      const research = researchResult.documents[0]
       companyData = {
-        name: researchData.name,
-        url: researchData.url,
-        industry: researchData.industry || null,
-        hqLocation: researchData.hqLocation || null,
-        researchReport: researchData.researchReport || null,
-        companyInfo: researchData.companyInfo,
-        generatedAt: researchData.generatedAt
+        name: research.companyName,
+        url: research.companyUrl,
+        industry: research.industry || null,
+        hqLocation: research.hqLocation || null,
+        researchReport: research.researchReport || null,
+        companyInfo: research.companyInfo ? JSON.parse(research.companyInfo) : {},
+        generatedAt: research.generatedAt,
+        references: research.references ? JSON.parse(research.references) : []
       }
     }
 

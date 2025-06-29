@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { EnhancedChatInterface } from '@/components/chat/enhanced-chat-interface'
+import { AIChatInterface } from '@/components/chat/ai-chat-interface'
 import { Card, CardContent } from '@/components/ui/card'
 import { Loader2, AlertCircle, Globe, Building } from 'lucide-react'
 
@@ -132,14 +132,15 @@ export default function PublicChatbotPage() {
 
       {/* Chat Interface */}
       <main className="max-w-4xl mx-auto px-4 py-6">
-                 <EnhancedChatInterface
+                 <AIChatInterface
+           companyName={chatbot.companyName}
            chatbotId={chatbot.namespace}
            namespace={chatbot.namespace}
-           companyInfo={{
+           companyData={{
              name: chatbot.companyName,
-             domain: chatbot.domain,
-             description: chatbot.description,
+             url: chatbot.domain,
              industry: chatbot.industry,
+             researchReport: chatbot.description
            }}
          />
       </main>

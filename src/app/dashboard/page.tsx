@@ -178,9 +178,9 @@ export default function DashboardPage() {
               <SidebarTrigger className="mr-4" />
               <div className="flex justify-between items-center w-full">
                 <div>
-                  <h1 className="text-xl font-bold text-foreground">My Projects</h1>
+                  <h1 className="text-xl font-bold text-foreground">Business Intelligence Hub</h1>
                   <p className="text-sm text-muted-foreground">
-                    {allChatbots.length} project{allChatbots.length !== 1 ? 's' : ''} created
+                    {allChatbots.length} company research project{allChatbots.length !== 1 ? 's' : ''} • Sales, M&A, and Market Analysis
                   </p>
                 </div>
                 
@@ -188,7 +188,7 @@ export default function DashboardPage() {
                   <Link href="/">
                     <Button className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white">
                       <Plus className="w-4 h-4 mr-2" />
-                      Create Project
+                      Research Company
                     </Button>
                   </Link>
                 </div>

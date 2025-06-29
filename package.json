@@ -1,6 +1,7 @@
 {
-  "name": "tavily-chatbot-app",
-  "version": "0.1.0",
+  "name": "walnut-ai-platform",
+  "version": "1.0.0",
+  "description": "Business Intelligence Platform for Sales & Strategy Teams",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",

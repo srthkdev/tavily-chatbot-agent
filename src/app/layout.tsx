@@ -17,20 +17,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Walnut AI - Business Intelligence & Research",
-  description: "Comprehensive company research, financial insights, and AI-powered business intelligence. Get detailed reports and chat with company-specific AI assistants.",
-  keywords: "business intelligence, company research, financial analysis, AI research, market analysis, corporate intelligence",
+  title: "Walnut AI - Business Intelligence Platform for Sales & Strategy Teams",
+  description: "Transform sales prospecting, M&A analysis, and market research. Get investment-grade company intelligence in 2 minutes. Trusted by VCs, consultants, and Fortune 500 teams.",
+  keywords: "business intelligence, sales prospecting, M&A analysis, market research, competitive intelligence, company research, due diligence, investment analysis, sales intelligence, corporate strategy",
   authors: [{ name: "Walnut AI Team" }],
   openGraph: {
-    title: "Walnut AI - Business Intelligence & Research",
-    description: "Comprehensive company research and AI-powered business intelligence.",
+    title: "Walnut AI - Business Intelligence Platform",
+    description: "95% faster company research for sales teams, corporate strategy, and entrepreneurs. From prospect research to M&A analysis.",
     type: "website",
     url: "https://walnut-ai.vercel.app",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Walnut AI",
-    description: "AI-powered business intelligence and company research platform",
+    title: "Walnut AI - Business Intelligence Platform",
+    description: "Transform sales prospecting and M&A analysis with AI-powered company intelligence",
   },
 };
 
@@ -48,7 +48,7 @@ export default function RootLayout({
         <QueryProvider>
           <ThemeProvider
             defaultTheme="light"
-            storageKey="tavily-ai-theme"
+            storageKey="walnut-ai-theme"
           >
             <AuthProvider>
               {children}

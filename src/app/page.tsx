@@ -6,6 +6,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { 
   Building2, 
@@ -23,9 +25,20 @@ import {
   Settings,
   TrendingUp,
   Users,
-  FileText
+  FileText,
+  Clock,
+  CheckCircle,
+  Activity
 } from "lucide-react"
 import { toast } from "sonner"
+
+interface LogEntry {
+  id: string
+  message: string
+  status: 'pending' | 'completed' | 'error'
+  timestamp: Date
+  company?: string
+}
 
 export default function HomePage() {
   const router = useRouter()
@@ -38,6 +51,27 @@ export default function HomePage() {
     hqLocation: ''
   })
   const [loading, setLoading] = useState(false)
+  const [logs, setLogs] = useState<LogEntry[]>([])
+
+  const addLog = (message: string, status: 'pending' | 'completed' | 'error' = 'pending', company?: string) => {
+    const logEntry: LogEntry = {
+      id: Date.now().toString(),
+      message,
+      status,
+      timestamp: new Date(),
+      company
+    }
+    setLogs(prev => [logEntry, ...prev.slice(0, 9)]) // Keep only 10 most recent logs
+    return logEntry.id
+  }
+
+  const updateLog = (id: string, status: 'completed' | 'error', message?: string) => {
+    setLogs(prev => prev.map(log => 
+      log.id === id 
+        ? { ...log, status, message: message || log.message }
+        : log
+    ))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,6 +88,9 @@ export default function HomePage() {
     setLoading(true)
     
     try {
+      // Add initial log
+      const initLog = addLog(`Starting research for ${formData.company}...`, 'pending', formData.company)
+
       // Normalize URL if provided
       let normalizedUrl = formData.companyUrl.trim()
       if (normalizedUrl && !normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
@@ -69,6 +106,9 @@ export default function HomePage() {
         }
       }
 
+      // Step 1: Research
+      const researchLog = addLog(`Analyzing ${formData.company} business data...`, 'pending', formData.company)
+      
       // First, run company research to get comprehensive data
       const researchResponse = await fetch('/api/company-research', {
         method: 'POST',
@@ -88,6 +128,12 @@ export default function HomePage() {
 
       const researchResult = await researchResponse.json()
       const { companyInfo, report } = researchResult.data
+
+      updateLog(researchLog, 'completed', `Business analysis completed for ${formData.company}`)
+      updateLog(initLog, 'completed')
+
+      // Step 2: Create project
+      const projectLog = addLog(`Creating AI assistant for ${formData.company}...`, 'pending', formData.company)
 
       // Create chatbot with research data
       const chatbotResponse = await fetch('/api/tavily/create-bot', {
@@ -118,6 +164,8 @@ export default function HomePage() {
 
       const chatbotResult = await chatbotResponse.json()
       
+      updateLog(projectLog, 'completed', `${formData.company} project created successfully!`)
+      
       toast.success(`${formData.company} project created successfully!`)
       
       // Clear localStorage
@@ -128,7 +176,9 @@ export default function HomePage() {
 
     } catch (error) {
       console.error('Error creating company project:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to create company project')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create company project'
+      addLog(`Error: ${errorMessage}`, 'error', formData.company)
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -151,6 +201,21 @@ export default function HomePage() {
     }
   }, [isAuthenticated])
 
+  // Add some demo logs on component mount
+  useEffect(() => {
+    const demoLogs = [
+      { message: "Tesla project created successfully!", status: 'completed' as const, company: 'Tesla' },
+      { message: "Microsoft business analysis completed", status: 'completed' as const, company: 'Microsoft' },
+      { message: "Apple AI assistant deployed", status: 'completed' as const, company: 'Apple' },
+    ]
+    
+    demoLogs.forEach((log, index) => {
+      setTimeout(() => {
+        addLog(log.message, log.status, log.company)
+      }, index * 1000)
+    })
+  }, [])
+
   const handleCompanyChange = (company: string) => {
     setFormData(prev => ({ ...prev, company }))
   }
@@ -166,8 +231,8 @@ export default function HomePage() {
                 <Building2 className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-foreground">Company Research AI</h1>
-                <p className="text-xs text-muted-foreground">Comprehensive Business Intelligence Platform</p>
+                <h1 className="text-xl font-bold text-foreground">Walnut AI</h1>
+                <p className="text-xs text-muted-foreground">Business Intelligence for Sales & Strategy Teams</p>
               </div>
             </div>
             
@@ -214,15 +279,15 @@ export default function HomePage() {
             Business Intelligence
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Get comprehensive business intelligence, financial insights, and an AI assistant for any company in minutes.
+            Transform sales prospecting, M&A analysis, and market research. Get investment-grade company intelligence in 2 minutes, not hours.
           </p>
         </div>
 
         {/* Creation Form */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-blue-100 p-8 mb-16">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-blue-100 p-8 mb-8">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Create Company Project</h2>
-            <p className="text-gray-600">Enter company details to generate comprehensive research and AI assistant</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Research Any Company</h2>
+            <p className="text-gray-600">Generate professional business intelligence reports and AI-powered insights for sales, M&A, or market analysis</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -290,15 +355,15 @@ export default function HomePage() {
             </div>
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h4 className="font-medium text-blue-900 mb-3">Your project will include:</h4>
+              <h4 className="font-medium text-blue-900 mb-3">Your business intelligence package includes:</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="flex items-center space-x-3">
                   <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                     <FileText className="w-4 h-4 text-blue-600" />
                   </div>
                   <div>
-                    <p className="font-medium text-blue-900 text-sm">Research Report</p>
-                    <p className="text-blue-700 text-xs">Comprehensive analysis</p>
+                    <p className="font-medium text-blue-900 text-sm">Executive Report</p>
+                    <p className="text-blue-700 text-xs">Investment-grade analysis</p>
                   </div>
                 </div>
                 
@@ -307,8 +372,8 @@ export default function HomePage() {
                     <MessageSquare className="w-4 h-4 text-purple-600" />
                   </div>
                   <div>
-                    <p className="font-medium text-blue-900 text-sm">AI Chatbot</p>
-                    <p className="text-blue-700 text-xs">Company assistant</p>
+                    <p className="font-medium text-blue-900 text-sm">AI Research Assistant</p>
+                    <p className="text-blue-700 text-xs">Deep-dive analysis</p>
                   </div>
                 </div>
 
@@ -317,8 +382,8 @@ export default function HomePage() {
                     <Settings className="w-4 h-4 text-green-600" />
                   </div>
                   <div>
-                    <p className="font-medium text-blue-900 text-sm">Admin Panel</p>
-                    <p className="text-blue-700 text-xs">Manage & configure</p>
+                    <p className="font-medium text-blue-900 text-sm">Intelligence Hub</p>
+                    <p className="text-blue-700 text-xs">Manage research</p>
                   </div>
                 </div>
               </div>
@@ -337,7 +402,7 @@ export default function HomePage() {
                   </>
                 ) : (
                   <>
-                    Create Project
+                    Generate Intelligence Report
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </>
                 )}
@@ -346,67 +411,113 @@ export default function HomePage() {
           </form>
         </div>
 
+        {/* Activity Logs */}
+        {logs.length > 0 && (
+          <Card className="bg-white/80 backdrop-blur-sm border-blue-100 mb-16">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Activity className="w-5 h-5 text-green-600" />
+                <span>Live Activity</span>
+                <Badge variant="secondary" className="text-xs">
+                  {logs.filter(log => log.status === 'completed').length} completed
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {logs.map((log) => (
+                  <div key={log.id} className="flex items-center gap-3 text-sm p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                    {log.status === 'pending' && (
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-600 flex-shrink-0" />
+                    )}
+                    {log.status === 'completed' && (
+                      <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                    )}
+                    {log.status === 'error' && (
+                      <div className="h-4 w-4 rounded-full bg-red-600 flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <span className={`block ${log.status === 'error' ? 'text-red-600' : 'text-gray-700'}`}>
+                        {log.message}
+                      </span>
+                      {log.company && (
+                        <Badge variant="outline" className="text-xs mt-1">
+                          {log.company}
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-400 flex items-center gap-1 flex-shrink-0">
+                      <Clock className="h-3 w-3" />
+                      {log.timestamp.toLocaleTimeString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Features */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-6 mb-16">
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-blue-100">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
               <Search className="w-5 h-5 text-blue-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Deep Research</h3>
-            <p className="text-sm text-gray-600">Comprehensive company analysis with Tavily AI</p>
+            <h3 className="font-semibold text-gray-900 mb-2">Sales Intelligence</h3>
+            <p className="text-sm text-gray-600">Prospect research for sales teams</p>
           </div>
           
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-blue-100">
             <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
               <BarChart3 className="w-5 h-5 text-green-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Financial Insights</h3>
-            <p className="text-sm text-gray-600">Revenue, funding, and market analysis</p>
+            <h3 className="font-semibold text-gray-900 mb-2">M&A Analysis</h3>
+            <p className="text-sm text-gray-600">Due diligence and target evaluation</p>
           </div>
           
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-blue-100">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
               <MessageSquare className="w-5 h-5 text-purple-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2">AI Assistant</h3>
-            <p className="text-sm text-gray-600">Chat with company-specific AI agent</p>
+            <h3 className="font-semibold text-gray-900 mb-2">Market Research</h3>
+            <p className="text-sm text-gray-600">Competitive intelligence and positioning</p>
           </div>
 
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-6 border border-blue-100">
             <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
               <TrendingUp className="w-5 h-5 text-orange-600" />
             </div>
-            <h3 className="font-semibold text-gray-900 mb-2">Live Updates</h3>
-            <p className="text-sm text-gray-600">Real-time news and market data</p>
+            <h3 className="font-semibold text-gray-900 mb-2">Strategic Insights</h3>
+            <p className="text-sm text-gray-600">Executive briefings and reporting</p>
           </div>
         </div>
 
         {/* Benefits Section */}
         <div className="mt-16 text-center">
-          <h3 className="text-2xl font-bold text-gray-900 mb-8">Why Choose Our Platform?</h3>
+          <h3 className="text-2xl font-bold text-gray-900 mb-8">Why Business Teams Choose Walnut AI</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="space-y-3">
               <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mx-auto">
                 <Zap className="w-6 h-6 text-blue-600" />
               </div>
-              <h4 className="font-semibold text-gray-900">Lightning Fast</h4>
-              <p className="text-gray-600 text-sm">Get comprehensive company research in under 2 minutes</p>
+              <h4 className="font-semibold text-gray-900">95% Faster Research</h4>
+              <p className="text-gray-600 text-sm">From 4 hours to 2 minutes - transform your sales and strategy workflows</p>
             </div>
             
             <div className="space-y-3">
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mx-auto">
                 <Users className="w-6 h-6 text-purple-600" />
               </div>
-              <h4 className="font-semibold text-gray-900">Expert Quality</h4>
-              <p className="text-gray-600 text-sm">Professional-grade analysis powered by advanced AI</p>
+              <h4 className="font-semibold text-gray-900">Investment-Grade Quality</h4>
+              <p className="text-gray-600 text-sm">Professional analysis trusted by VCs, consultants, and Fortune 500 teams</p>
             </div>
             
             <div className="space-y-3">
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mx-auto">
                 <TrendingUp className="w-6 h-6 text-green-600" />
               </div>
-              <h4 className="font-semibold text-gray-900">Always Updated</h4>
-              <p className="text-gray-600 text-sm">Real-time data and continuous market monitoring</p>
+              <h4 className="font-semibold text-gray-900">Competitive Advantage</h4>
+              <p className="text-gray-600 text-sm">Close deals faster, make better investments, win more business</p>
             </div>
           </div>
         </div>

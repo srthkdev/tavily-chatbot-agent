@@ -15,6 +15,12 @@ export interface ResearchData {
   generatedAt: string
   createdAt?: string
   updatedAt?: string
+  references?: Array<{
+    url: string
+    title: string
+    domain: string
+    score?: number
+  }>
 }
 
 interface ResearchState {
