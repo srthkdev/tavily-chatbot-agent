@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { useAuth } from "@/contexts/auth-context"
 import { 
   Building2, 
@@ -306,47 +307,66 @@ export default function ProjectWorkspace() {
                       <p className="text-xs text-muted-foreground">
                         Website content processed
                       </p>
+                      <div className="mt-2">
+                        <Progress value={Math.min((parseInt(String(project.pagesCrawled || '0')) / 50) * 100, 100)} className="h-1" />
+                      </div>
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Documents Stored</CardTitle>
+                      <CardTitle className="text-sm font-medium">Vector Embeddings</CardTitle>
                       <Database className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">{project.documentsStored || 0}</div>
                       <p className="text-xs text-muted-foreground">
-                        Vector database entries
+                        AI knowledge base entries
                       </p>
+                      <div className="mt-2 flex items-center text-xs">
+                        <span className={`inline-block w-2 h-2 rounded-full mr-2 ${(project.documentsStored || 0) > 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
+                        {(project.documentsStored || 0) > 0 ? 'Knowledge base active' : 'No embeddings yet'}
+                      </div>
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Research Status</CardTitle>
+                      <CardTitle className="text-sm font-medium">Research Report</CardTitle>
                       <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
                       <div className="text-2xl font-bold">
-                        {currentResearch?.researchReport ? 'Complete' : 'Pending'}
+                        {currentResearch?.researchReport ? (
+                          <span className="text-green-600">Complete</span>
+                        ) : (
+                          <span className="text-amber-600">Pending</span>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Company analysis report
+                        AI-generated analysis
                       </p>
+                      {currentResearch?.generatedAt && (
+                        <p className="text-xs text-green-600 mt-1">
+                          Generated {new Date(currentResearch.generatedAt).toLocaleDateString()}
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
 
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">AI Assistant</CardTitle>
+                      <CardTitle className="text-sm font-medium">AI Capabilities</CardTitle>
                       <Bot className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">Ready</div>
+                      <div className="text-2xl font-bold text-blue-600">4/4</div>
                       <p className="text-xs text-muted-foreground">
-                        RAG-powered chat available
+                        Active AI features
                       </p>
+                      <div className="mt-2 text-xs text-green-600">
+                        RAG • Mem0 • Tavily • GPT-4
+                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -479,6 +499,127 @@ export default function ProjectWorkspace() {
                             </div>
                           </div>
                         </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Recent Activity & Insights */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2">
+                        <Calendar className="w-5 h-5 text-purple-600" />
+                        <span>Recent Activity</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-start space-x-3 p-3 bg-blue-50 rounded-lg">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium">Project Created</p>
+                            <p className="text-xs text-gray-600">
+                              {new Date(project.createdAt).toLocaleDateString()} at {new Date(project.createdAt).toLocaleTimeString()}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {(project.pagesCrawled && parseInt(String(project.pagesCrawled)) > 0) && (
+                          <div className="flex items-start space-x-3 p-3 bg-green-50 rounded-lg">
+                            <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm font-medium">Website Crawled</p>
+                              <p className="text-xs text-gray-600">
+                                {project.pagesCrawled} pages processed from {project.url ? new URL(project.url).hostname : 'website'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {currentResearch?.researchReport && (
+                          <div className="flex items-start space-x-3 p-3 bg-purple-50 rounded-lg">
+                            <div className="w-2 h-2 bg-purple-500 rounded-full mt-2 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm font-medium">Research Generated</p>
+                              <p className="text-xs text-gray-600">
+                                AI analysis completed {currentResearch.generatedAt ? new Date(currentResearch.generatedAt).toLocaleDateString() : 'recently'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {(!project.pagesCrawled || parseInt(String(project.pagesCrawled)) === 0) && !currentResearch?.researchReport && (
+                          <div className="text-center py-4 text-gray-500">
+                            <p className="text-sm">No recent activity</p>
+                            <p className="text-xs mt-1">Start by generating a research report or crawling website content</p>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2">
+                        <TrendingUp className="w-5 h-5 text-green-600" />
+                        <span>Company Insights</span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {currentResearch?.companyInfo && Object.keys(currentResearch.companyInfo).length > 0 ? (
+                          <div className="space-y-3">
+                            {currentResearch.industry && (
+                              <div className="p-3 bg-blue-50 rounded-lg">
+                                <p className="text-sm font-medium text-blue-800">Industry Focus</p>
+                                <p className="text-xs text-blue-600 mt-1">{currentResearch.industry}</p>
+                              </div>
+                            )}
+                            
+                            {currentResearch.hqLocation && (
+                              <div className="p-3 bg-green-50 rounded-lg">
+                                <p className="text-sm font-medium text-green-800">Headquarters</p>
+                                <p className="text-xs text-green-600 mt-1">{currentResearch.hqLocation}</p>
+                              </div>
+                            )}
+
+                            {currentResearch.references && currentResearch.references.length > 0 && (
+                              <div className="p-3 bg-purple-50 rounded-lg">
+                                <p className="text-sm font-medium text-purple-800">Research Sources</p>
+                                <p className="text-xs text-purple-600 mt-1">
+                                  {currentResearch.references.length} authoritative sources analyzed
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="p-3 bg-gray-50 rounded-lg">
+                              <p className="text-sm font-medium text-gray-700">Company Website</p>
+                              <p className="text-xs text-gray-600 mt-1">
+                                {project.url ? new URL(project.url).hostname : 'No website configured'}
+                              </p>
+                            </div>
+                            
+                            <div className="p-3 bg-amber-50 rounded-lg">
+                              <p className="text-sm font-medium text-amber-800">Analysis Status</p>
+                              <p className="text-xs text-amber-600 mt-1">
+                                Generate a research report to unlock detailed company insights
+                              </p>
+                            </div>
+
+                                                         <div className="pt-2">
+                               <GenerateResearchButton
+                                 projectId={project.$id}
+                                 projectName={project.name}
+                                 projectUrl={project.url}
+                                 onResearchGenerated={handleResearchGenerated}
+                                 className="w-full"
+                               />
+                             </div>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

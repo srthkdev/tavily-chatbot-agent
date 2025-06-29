@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
 
 interface User {
   id: string
@@ -37,7 +37,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  const refreshUser = async (retryCount = 0) => {
+  const refreshUser = useCallback(async (retryCount = 0) => {
     try {
       const response = await fetch('/api/auth/me', {
         credentials: 'include', // Ensure cookies are included
@@ -66,7 +66,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       
       setUser(null)
     }
-  }
+  }, [])
 
   const login = async (email: string, password: string) => {
     const response = await fetch('/api/auth/login', {
@@ -135,7 +135,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
 
     initAuth()
-  }, [])
+  }, [refreshUser])
 
   // Add visibility change listener to refresh auth when tab becomes visible
   useEffect(() => {
@@ -148,7 +148,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [user])
+  }, [user, refreshUser])
 
   const value: AuthContextType = {
     user,

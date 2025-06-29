@@ -90,8 +90,10 @@ export async function POST(
           industry: industry || '',
           hqLocation: hqLocation || '',
           researchReport: result.report,
-          companyInfo: JSON.stringify(result.companyInfo || {}),
-          references: JSON.stringify(result.references || []),
+          companyInfo: JSON.stringify({
+            ...result.companyInfo || {},
+            references: result.references || []
+          }),
           generatedAt: now,
           status: 'completed'
         }
@@ -110,8 +112,10 @@ export async function POST(
           industry: industry || '',
           hqLocation: hqLocation || '',
           researchReport: result.report,
-          companyInfo: JSON.stringify(result.companyInfo || {}),
-          references: JSON.stringify(result.references || []),
+          companyInfo: JSON.stringify({
+            ...result.companyInfo || {},
+            references: result.references || []
+          }),
           generatedAt: now,
           status: 'completed',
           createdAt: now
@@ -204,15 +208,22 @@ export async function GET(
 
     if (researchResult.documents.length > 0) {
       const research = researchResult.documents[0]
+      const parsedCompanyInfo = research.companyInfo ? JSON.parse(research.companyInfo) : {}
+      const references = parsedCompanyInfo.references || []
+      
+      // Remove references from companyInfo to avoid duplication
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { references: _, ...companyInfoWithoutReferences } = parsedCompanyInfo
+      
       companyData = {
         name: research.companyName,
         url: research.companyUrl,
         industry: research.industry || null,
         hqLocation: research.hqLocation || null,
         researchReport: research.researchReport || null,
-        companyInfo: research.companyInfo ? JSON.parse(research.companyInfo) : {},
+        companyInfo: companyInfoWithoutReferences,
         generatedAt: research.generatedAt,
-        references: research.references ? JSON.parse(research.references) : []
+        references: references
       }
     }
 

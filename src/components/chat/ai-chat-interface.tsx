@@ -130,23 +130,24 @@ export function AIChatInterface({
         const response = await fetch(`/api/chat/history/${chatbotId}`)
         if (response.ok) {
           const data = await response.json()
-          if (data.success && data.messages) {
-            setMessages(data.messages.map((msg: { id: string; role: 'user' | 'assistant'; content: string; sources?: Source[]; timestamp: string; capabilities?: string[] }) => ({
+          if (data.success && data.messages && data.messages.length > 0) {
+            const loadedMessages = data.messages.map((msg: { id: string; role: 'user' | 'assistant'; content: string; sources?: Source[]; timestamp: string; capabilities?: string[] }) => ({
               ...msg,
               timestamp: new Date(msg.timestamp)
-            })))
+            }))
+            setMessages(loadedMessages)
+            return // Exit early if we have messages
           }
         }
       } catch (error) {
         console.warn('Failed to load chat history:', error)
       }
       
-      // Add welcome message if no history
-      if (messages.length === 0) {
-        setMessages([{
-          id: '1',
-          role: 'assistant',
-          content: `Hi! I'm the **${companyName} AI Assistant**. I'm powered by GPT-4.1 and have access to:
+      // Only add welcome message if no history was loaded
+      setMessages([{
+        id: '1',
+        role: 'assistant',
+        content: `Hi! I'm the **${companyName} AI Assistant**. I'm powered by GPT-4.1 and have access to:
 
 🔍 **Real-time web search** via Tavily API
 🧠 **Company memory** via Mem0 
@@ -162,10 +163,9 @@ I can help you with:
 - Strategic recommendations
 
 What would you like to know about ${companyName}?`,
-          timestamp: new Date(),
-          capabilities: ['Real-time search', 'Memory', 'RAG', 'Complex reasoning']
-        }])
-      }
+        timestamp: new Date(),
+        capabilities: ['Real-time search', 'Memory', 'RAG', 'Complex reasoning']
+      }])
     }
     
     loadChatHistory()

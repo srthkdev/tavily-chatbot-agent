@@ -193,6 +193,7 @@ async function updateCollections() {
 
         // Messages attributes
         const messageAttributes = [
+            { key: 'conversationId', type: 'string', size: 255, required: true },
             { key: 'chatbotId', type: 'string', size: 255, required: true },
             { key: 'userId', type: 'string', size: 255, required: true },
             { key: 'messageId', type: 'string', size: 255, required: true },
@@ -387,6 +388,7 @@ async function updateCollections() {
             { collection: 'chatbots', key: 'userId', type: 'key' },
             { collection: 'chatbots', key: 'namespace', type: 'unique' },
             { collection: 'chatbots', key: 'status', type: 'key' },
+            { collection: 'messages', key: 'conversationId', type: 'key' },
             { collection: 'messages', key: 'chatbotId', type: 'key' },
             { collection: 'messages', key: 'userId', type: 'key' },
             { collection: 'messages', key: 'timestamp', type: 'key' },

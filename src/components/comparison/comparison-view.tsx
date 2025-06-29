@@ -398,10 +398,13 @@ export function ComparisonView({ companyName, companyData }: ComparisonViewProps
   const [isLoadingCompetitors, setIsLoadingCompetitors] = useState(false)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
 
+  // Extract industry from company data for better competitor search
+  const industry = companyData?.industry || companyData?.companyInfo?.industry as string || 'technology'
+
   const loadRealCompetitors = useCallback(async () => {
     setIsLoadingCompetitors(true)
     try {
-      const realCompetitors = await getIndustryCompetitors(companyName, companyData?.industry || undefined)
+      const realCompetitors = await getIndustryCompetitors(companyName, industry)
       setCompetitors(realCompetitors)
       setLastRefresh(new Date())
       
@@ -418,7 +421,7 @@ export function ComparisonView({ companyName, companyData }: ComparisonViewProps
     } finally {
       setIsLoadingCompetitors(false)
     }
-  }, [companyName, companyData?.industry])
+  }, [companyName, industry])
 
   // Load persisted data on mount
   useEffect(() => {

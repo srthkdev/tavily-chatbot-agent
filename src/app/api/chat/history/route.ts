@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
       clientConfig.appwrite.collections.messages,
       'unique()',
       {
+        conversationId: `${chatbotId}_${user.$id}`, // Use chatbotId + userId as conversation ID
         chatbotId,
         userId: user.$id,
         messageId: message.id,
